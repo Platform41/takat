@@ -24,11 +24,33 @@ public final class UsageStore {
         errors = [:]
         defer { isRefreshing = false }
 
-        for provider in providers {
-            do {
-                snapshots[provider.providerID] = try await provider.fetchUsage()
-            } catch {
-                errors[provider.providerID] = (error as? UsageProviderError) ?? .unavailable
+        let providers = self.providers
+        let results = await withTaskGroup(of: (ProviderID, Result<UsageSnapshot, UsageProviderError>).self) { group in
+            for provider in providers {
+                group.addTask {
+                    do {
+                        let snapshot = try await provider.fetchUsage()
+                        return (provider.providerID, .success(snapshot))
+                    } catch {
+                        let mapped = (error as? UsageProviderError) ?? .unavailable
+                        return (provider.providerID, .failure(mapped))
+                    }
+                }
+            }
+
+            var collected: [(ProviderID, Result<UsageSnapshot, UsageProviderError>)] = []
+            for await result in group {
+                collected.append(result)
+            }
+            return collected
+        }
+
+        for (id, result) in results {
+            switch result {
+            case .success(let snapshot):
+                snapshots[id] = snapshot
+            case .failure(let error):
+                errors[id] = error
             }
         }
     }
