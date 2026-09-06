@@ -27,8 +27,8 @@ The first milestone is a fixture-backed SwiftUI prototype. Live provider integra
 
 ## Requirements
 
-- macOS 13 or later
-- Xcode 15 or later
+- macOS Tahoe 26 or later
+- Xcode 26 or later
 
 ## License
 
