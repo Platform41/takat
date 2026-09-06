@@ -15,7 +15,7 @@ Early prototype with a fixture-backed dashboard. The repository contains the nat
 - `Sources/Takat/App` — application entry point and menu bar scene
 - `Sources/Takat/Core/Models` — provider-neutral usage data
 - `Sources/Takat/Core/Providers` — usage provider protocol and fixture adapter
-- `Sources/Takat/Core/UsageStore` — refreshes snapshots from providers and exposes them to views
+- `Sources/Takat/Core/UsageStore.swift` — refreshes snapshots from providers and exposes them to views
 - `Sources/Takat/Features` — dashboard and settings screens
 - `Sources/Takat/DesignSystem` — provider visual mapping (symbols, colors, display names)
 - `Tests/TakatTests` — model, provider, and store tests
