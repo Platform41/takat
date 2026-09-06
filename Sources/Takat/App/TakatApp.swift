@@ -18,6 +18,7 @@ struct TakatApp: App {
                 .frame(width: 360)
                 .environment(store)
         }
+        .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView()
