@@ -47,7 +47,8 @@ public struct FixtureUsageProvider: UsageProvider {
 
         let daily: [DailyTokenUsage] = (0..<7).reversed().map { offset in
             let day = calendar.date(byAdding: .day, value: -offset, to: startOfToday) ?? startOfToday
-            return DailyTokenUsage(day: day, tokenCount: tokenPattern[offset % tokenPattern.count])
+            let index = (tokenPattern.count - 1 - offset) % tokenPattern.count
+            return DailyTokenUsage(day: day, tokenCount: tokenPattern[index])
         }
 
         return UsageSnapshot(
