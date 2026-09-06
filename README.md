@@ -8,22 +8,22 @@ The product takes the usage visibility of Omarchy’s panel as inspiration and f
 
 ## Status
 
-Early prototype. The current repository contains the native app shell, provider-neutral usage models, and architecture baseline. Live provider integrations are not available yet.
+Early prototype with a fixture-backed dashboard. The repository contains the native app shell, provider-neutral usage models, a `UsageStore` refresh layer, and a fixture adapter. Live provider integrations are not available yet.
 
 ## Structure
 
 - `Sources/Takat/App` — application entry point and menu bar scene
 - `Sources/Takat/Core/Models` — provider-neutral usage data
-- `Sources/Takat/Core/Providers` — Claude and Codex data adapters
-- `Sources/Takat/Core/Storage` — Keychain and local cache abstractions
+- `Sources/Takat/Core/Providers` — usage provider protocol and fixture adapter
+- `Sources/Takat/Core/UsageStore.swift` — refreshes snapshots from providers and exposes them to views
 - `Sources/Takat/Features` — dashboard and settings screens
-- `Sources/Takat/DesignSystem` — shared visual tokens and components
-- `Tests/TakatTests` — model and provider tests
+- `Sources/Takat/DesignSystem` — provider visual mapping (symbols, colors, display names)
+- `Tests/TakatTests` — model, provider, and store tests
 - `docs` — product and architecture decisions
 
 ## Development
 
-The first milestone is a fixture-backed SwiftUI prototype. Live provider integrations will be added behind the provider protocol after their supported data sources are confirmed.
+The first milestone is a fixture-backed SwiftUI prototype, now in place. Live provider integrations will be added behind the provider protocol after their supported data sources are confirmed.
 
 ## Requirements
 

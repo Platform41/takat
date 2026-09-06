@@ -17,7 +17,7 @@ Menu bar scene
 ## Initial decisions
 
 - Native SwiftUI application
-- macOS 13 or later
+- macOS 26 (Tahoe) or later
 - `MenuBarExtra` for the menu bar entry point
 - Keychain for credentials and tokens
 - Swift concurrency for refresh and provider calls
@@ -30,8 +30,8 @@ Every provider returns the same `UsageSnapshot` model. Provider-specific authent
 
 ## Delivery order
 
-1. Fixture-backed dashboard
-2. Menu bar and settings shell
+1. Fixture-backed dashboard ✅
+2. Menu bar and settings shell ✅
 3. Persistence and refresh state
 4. Codex adapter
 5. Claude adapter
