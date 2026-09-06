@@ -101,6 +101,10 @@ private struct UsageBar: View {
     let title: String
     let percent: Double?
 
+    private var percentText: String {
+        percent.map { "\(Int($0.rounded()))%" } ?? "—"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -108,12 +112,15 @@ private struct UsageBar: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(percent.map { "\(Int($0.rounded()))%" } ?? "—")
+                Text(percentText)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            ProgressView(value: percent ?? 0, total: 100)
+            ProgressView(value: min(percent ?? 0, 100), total: 100)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(percent.map { "\(Int($0.rounded()))%" } ?? "No data")
     }
 }
 
