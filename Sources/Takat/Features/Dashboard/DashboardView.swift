@@ -10,7 +10,13 @@ struct DashboardView: View {
         }
         .padding(16)
         .task {
-            if store.snapshots.isEmpty {
+            await store.loadPersistedSnapshots()
+            if store.needsRefreshOnOpen {
+                await store.refresh()
+            }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(RefreshPolicy.refreshInterval))
+                guard !Task.isCancelled else { break }
                 await store.refresh()
             }
         }
@@ -46,7 +52,11 @@ struct DashboardView: View {
         } else {
             ForEach(ProviderID.allCases, id: \.self) { providerID in
                 if let snapshot = store.snapshot(for: providerID) {
-                    ProviderCardView(snapshot: snapshot)
+                    ProviderCardView(
+                        snapshot: snapshot,
+                        lastUpdated: store.lastUpdated(for: providerID),
+                        hasError: store.errors[providerID] != nil
+                    )
                 }
             }
         }
@@ -66,6 +76,13 @@ struct DashboardView: View {
 
 private struct ProviderCardView: View {
     let snapshot: UsageSnapshot
+    let lastUpdated: Date?
+    let hasError: Bool
+
+    private var isStale: Bool {
+        guard let lastUpdated else { return false }
+        return RefreshPolicy.isStale(lastUpdated)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -81,8 +98,12 @@ private struct ProviderCardView: View {
                     .background(.quaternary, in: Capsule())
             }
 
+            freshnessRow
+
             UsageBar(title: "Session", percent: snapshot.sessionPercent)
+                .tint(snapshot.provider.accentColor)
             UsageBar(title: "Weekly", percent: snapshot.weeklyPercent)
+                .tint(snapshot.provider.accentColor)
 
             if let resetDate = snapshot.resetDate {
                 Text("Resets \(resetDate, format: .dateTime.month(.abbreviated).day())")
@@ -94,6 +115,26 @@ private struct ProviderCardView: View {
         }
         .padding(12)
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder
+    private var freshnessRow: some View {
+        if let lastUpdated {
+            HStack(spacing: 4) {
+                if isStale {
+                    Image(systemName: "clock.badge.exclamationmark")
+                        .foregroundStyle(.orange)
+                }
+                Text("Updated \(lastUpdated, format: .relative(presentation: .named))")
+                    .font(.caption)
+                    .foregroundStyle(isStale ? .orange : .secondary)
+                if hasError {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .help("Provider unavailable — showing last known data")
+                }
+            }
+        }
     }
 }
 
