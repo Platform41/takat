@@ -23,7 +23,9 @@ Early prototype with a fixture-backed dashboard. The repository contains the nat
 
 ## Development
 
-The first milestone is a fixture-backed SwiftUI prototype, now in place. Live provider integrations will be added behind the provider protocol after their supported data sources are confirmed.
+- **Run (dev):** `swift run Takat`
+- **Build the app:** `./scripts/build-app.sh` → `dist/Takat.app`; drag to `/Applications`; first launch: right-click → Open (unsigned).
+- **Start at login:** toggle in Takat → Settings (⌘,).
 
 ## Requirements
 
