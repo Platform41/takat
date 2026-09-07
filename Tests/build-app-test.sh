@@ -18,6 +18,13 @@ if [[ ! -x "$APP/Contents/MacOS/Takat" ]]; then
     exit 1
 fi
 
+if [[ ! -f "$APP/Contents/Resources/Takat.icns" ]]; then
+    echo "FAIL: icon missing at $APP/Contents/Resources/Takat.icns"
+    exit 1
+fi
+
 plutil -lint "$APP/Contents/Info.plist"
 
-echo "PASS: Takat.app assembled and signed"
+codesign --verify --deep --strict "$APP"
+
+echo "PASS: Takat.app assembled, signed, and carrying its icon"
