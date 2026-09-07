@@ -1,6 +1,6 @@
 import Foundation
 
-public struct UsageSnapshot: Equatable, Sendable {
+public struct UsageSnapshot: Equatable, Sendable, Codable {
     public let provider: ProviderID
     public let planName: String
     public let sessionPercent: Double?
@@ -25,12 +25,12 @@ public struct UsageSnapshot: Equatable, Sendable {
     }
 }
 
-public enum ProviderID: String, CaseIterable, Sendable {
+public enum ProviderID: String, CaseIterable, Sendable, Codable {
     case claude
     case codex
 }
 
-public struct DailyTokenUsage: Equatable, Sendable {
+public struct DailyTokenUsage: Equatable, Sendable, Codable {
     public let day: Date
     public let tokenCount: Int
 
