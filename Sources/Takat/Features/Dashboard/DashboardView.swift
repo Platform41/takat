@@ -1,8 +1,15 @@
 import SwiftUI
 
+enum ChartData {
+    static func allZero(_ usage: [DailyTokenUsage]) -> Bool {
+        usage.isEmpty || usage.allSatisfy { $0.tokenCount == 0 }
+    }
+}
+
 struct DashboardView: View {
     @Environment(UsageStore.self) private var store
     @AppStorage("takat.selectedProvider") private var storedProviderRaw = ""
+    @State private var hoveredProvider: ProviderID?
 
     private var availableProviders: [ProviderID] {
         ProviderSwitcher.switcherProviders(snapshots: Set(store.snapshots.keys))
@@ -104,12 +111,26 @@ struct DashboardView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+                .background(segmentBackground(for: provider))
+                .onHover { hovering in
+                    hoveredProvider = hovering ? provider : nil
+                }
                 .accessibilityLabel("\(provider.displayName)\(store.errors[provider] != nil ? ", attention needed" : "")")
             }
         }
         .padding(2)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        .animation(.easeOut(duration: 0.1), value: hoveredProvider)
+    }
+
+    private func segmentBackground(for provider: ProviderID) -> Color {
+        if effectiveProvider == provider {
+            return provider.accentColor.opacity(0.18)
+        } else if hoveredProvider == provider {
+            return Color.primary.opacity(0.06)
+        } else {
+            return Color.clear
+        }
     }
 
     @ViewBuilder
@@ -241,22 +262,31 @@ private struct DailyUsageChart: View {
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            ForEach(usage, id: \.day) { entry in
-                VStack(spacing: 4) {
-                    Capsule()
-                        .fill(color.gradient)
-                        .frame(width: 14, height: barHeight(for: entry.tokenCount))
-                    Text(entry.day, format: .dateTime.weekday(.narrow))
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
+        if ChartData.allZero(usage) {
+            Text("No usage in the last 7 days")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("No usage in the last 7 days")
+        } else {
+            HStack(alignment: .bottom, spacing: 6) {
+                ForEach(usage, id: \.day) { entry in
+                    VStack(spacing: 4) {
+                        Capsule()
+                            .fill(color.gradient)
+                            .frame(width: 14, height: barHeight(for: entry.tokenCount))
+                        Text(entry.day, format: .dateTime.weekday(.narrow))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
             }
+            .frame(height: 64, alignment: .bottom)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Daily token usage")
         }
-        .frame(height: 64, alignment: .bottom)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Daily token usage")
     }
 
     private func barHeight(for count: Int) -> CGFloat {
