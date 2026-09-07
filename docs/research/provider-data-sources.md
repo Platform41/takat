@@ -1,22 +1,26 @@
 # Provider Data Sources — Research Dossier
 
-**Persona:** Insider (domain research) → hand to One before step 4/5 architecture
-**Date:** 2026-09-07
-**Method:** direct inspection of `~/.codex/` and `~/.claude/` on the maintainer's machine
-**Tool versions inspected:** `codex-cli 0.153.4`, `Claude Code 2.1.263`
+**Persona:** Insider (domain research) → hand to One before adapter architecture
+**Date:** 2026-09-07 (Codex + Claude); 2026-09-07 addendum (Gemini + DeepSeek)
+**Method:** direct inspection of `~/.codex/`, `~/.claude/`, `~/.gemini/` on the maintainer's machine; DeepSeek from public API docs (no local footprint)
+**Tool versions inspected:** `codex-cli 0.153.4`, `Claude Code 2.1.263`, Gemini CLI (oauth-personal auth, `sessionRetention 30d`)
 
-> All findings are from one machine. Treat file shapes as "observed", not "guaranteed stable across versions". Both CLIs are pre-1.0 and change their on-disk formats without notice — every adapter must be defensive and version-tolerant.
+> All findings are from one machine. Treat file shapes as "observed", not "guaranteed stable across versions". These CLIs are pre-1.0 and change their on-disk formats without notice — every adapter must be defensive and version-tolerant.
 
 ---
 
 ## Summary
 
-| Provider | Session % | Weekly % | Reset date | Plan name | Daily tokens | Auth needed |
-|---|---|---|---|---|---|---|
-| **Codex** | ✅ on disk | ✅ on disk | ✅ on disk | ✅ on disk | ✅ on disk | ❌ none (local files) |
-| **Claude** | ❌ not persisted | ❌ not persisted | ❌ not persisted | ⚠️ indirect | ✅ derivable | ❌ for tokens / ⚠️ for % |
+| Provider | Session % | Weekly % | Reset date | Plan name | Daily tokens | Balance | Auth needed |
+|---|---|---|---|---|---|---|---|
+| **Codex** | ✅ on disk | ✅ on disk | ✅ on disk | ✅ on disk | ✅ on disk | — | ❌ none (local files) |
+| **Claude** | ❌ not persisted | ❌ not persisted | ❌ not persisted | ⚠️ indirect | ✅ derivable | — | ❌ for tokens / ⚠️ for % |
+| **Gemini CLI** | ❌ not persisted | ❌ not persisted | ❌ not persisted | ⚠️ model id only | ✅ derivable | — | ❌ none (local files) |
+| **DeepSeek** | ❌ n/a | ❌ n/a | ❌ n/a | ❌ pay-as-you-go | ⚠️ only if you log API calls yourself | ✅ via API | ⚠️ API key (Keychain) |
 
-**Codex is the easy adapter and should be step 4.** Claude has no local record of subscription session/weekly usage — only per-message token counts. Ship the Claude adapter with token/chart data and leave the percentage bars `nil` (the model already treats them as optional).
+**Adapter difficulty order:** Codex (done) → **Claude** (local, tokens only) → **Gemini CLI** (local, tokens only — near-copy of Claude) → **DeepSeek** (network + Keychain, dollar balance not %, bundle with the deferred Claude `/usage` milestone).
+
+Consumer subscriptions with no CLI — Gemini Advanced / Google One AI, ChatGPT Plus web, Claude.ai web — expose **no usage API and no local logs**. Nothing to build for those.
 
 ---
 
@@ -147,13 +151,103 @@ These are fetched live from Anthropic's server by the CLI and rendered in `/usag
 
 ---
 
+## Gemini CLI — `~/.gemini/`
+
+### Where usage lives
+
+```
+~/.gemini/tmp/<project-hash>/chats/session-<ISO8601>.json
+```
+
+One JSON file per chat session (not JSONL — a single object). `sessionRetention` defaults to **30 days**, then the CLI prunes — fine for a 7-day chart.
+
+- `tmp/` also holds `logs.json` (flat prompt log, **no tokens** — ignore, like Codex's `history.jsonl`) and unrelated `antigravity-*` dirs. Touch only `tmp/*/chats/session-*.json`.
+- Directory names under `tmp/` are a mix of sha-hashes and plain slugs — just glob, don't try to resolve them. `~/.gemini/projects.json` maps real paths → slug names but isn't needed.
+
+### Session file shape
+
+```json
+{
+  "sessionId": "…", "projectHash": "…",
+  "startTime": "2026-03-05T02:41:53.926Z", "lastUpdated": "…",
+  "messages": [
+    {
+      "id": "…", "timestamp": "2026-03-05T02:42:00.053Z",
+      "type": "gemini",                       // or "user"
+      "model": "gemini-3-flash-preview",
+      "tokens": { "input": 7201, "output": 122, "cached": 3005, "thoughts": 338, "tool": 0, "total": 7661 }
+    }
+  ]
+}
+```
+
+- `total == input + output + thoughts` (verified). `cached` is a **subset of `input`** (cheap context re-reads).
+- `thoughts` is **separate from `output`** here (Gemini bills reasoning separately) — so it must be added, not treated as a subset.
+- `type: "user"` messages carry a zeroed `tokens` block — skip them; only `type: "gemini"` matters.
+
+### Mapping to `UsageSnapshot`
+
+| Field | Source |
+|---|---|
+| `provider` | `.gemini` (new `ProviderID` case) |
+| `planName` | no plan string anywhere → `"Gemini"` fixed. `model` per message (`gemini-3-flash-preview`, …) is the only identifier; could show the most-used model as a subtitle later. |
+| `sessionPercent` / `weeklyPercent` / `resetDate` | `nil` — not persisted. Auth here is `oauth-personal` (Code Assist free tier); request/day limits are enforced server-side and not written to these files. |
+| `dailyTokenUsage` | per-day sum of **`newTokens`**, bucketed by each `gemini` message's `timestamp` into `Calendar.current` days, 7 zero-filled entries |
+
+```swift
+// new work, excluding cached re-reads — consistent with the Codex/Claude metric
+newTokens = max(0, tokens.input - tokens.cached) + tokens.output + tokens.thoughts
+```
+
+### Trap doors
+
+- Whole-file JSON (not JSONL) — but files stay small (one chat). Still, cap defensively.
+- `thoughts` also appears as a top-level **array of reasoning summaries** on each message (`thoughts: [{subject, description, …}]`) — sensitive content. The token count is `tokens.thoughts` (an Int); do **not** confuse it with the array, and do not read the array.
+- Same privacy rule as Claude: model only `type`, `timestamp`, `model`, and the `tokens` integers. Never touch `content` / `thoughts[]`.
+- Sessions older than 30 days are gone — a "last 7 days" chart is always fully covered, but historical/monthly views are impossible.
+
+### Auth
+
+None — local files, `oauth-personal` login already done by the CLI.
+
+---
+
+## DeepSeek — no local footprint
+
+Checked: no `~/.deepseek`, no `~/.config/deepseek`, no first-party CLI on this machine. DeepSeek is **pay-as-you-go API credit**, not a subscription with a session/weekly quota. "My DeepSeek subscription" = a prepaid dollar balance.
+
+### What's available
+
+| Source | Data | Notes |
+|---|---|---|
+| `GET https://api.deepseek.com/user/balance` | `{ is_available, balance_infos: [{ currency, total_balance, granted_balance, topped_up_balance }] }` | Auth: `Authorization: Bearer <API_KEY>`. The **only** first-party usage signal. |
+| Chat completions response `usage` | `{ prompt_tokens, completion_tokens, total_tokens, prompt_cache_hit_tokens, prompt_cache_miss_tokens }` | Per-call only — no server-side history endpoint. Useful only if Takat itself proxied the calls, which it doesn't. |
+| platform.deepseek.com web dashboard | spend graphs, request counts | Human-only; no documented API. |
+| Third-party tools (aider / cline / opencode / …) using a DeepSeek key | that tool's own local logs | Tool-specific; out of scope. |
+
+### Mapping to `UsageSnapshot`
+
+Doesn't fit the percentage model. A DeepSeek card would show **"$X.XX credits remaining"**, optionally a spend sparkline derived from snapshotting the balance over time (store daily balance readings, chart the deltas).
+
+**Model change required** (do not add speculatively — only when this adapter is scheduled):
+- optional `balanceRemaining: Decimal?` + `balanceCurrency: String?` on `UsageSnapshot`, or a small `Balance` value type.
+- `dailyTokenUsage` stays empty for DeepSeek unless we start persisting balance deltas.
+
+### Auth
+
+API key, stored in the **macOS Keychain** — same infrastructure as the deferred Claude `/usage` route. Needs the signed-bundle entitlement work (step 6) and a settings UI to paste the key. **Bundle DeepSeek with the "network adapters" milestone, after step 5.**
+
+---
+
 ## Recommended delivery impact
 
-1. **Step 4 = Codex adapter**, local-file only. High confidence, ~1 day. Full `UsageSnapshot` parity with the fixture.
-2. **Step 5 = Claude adapter, Option A** (token/chart only, percentages `nil`). Medium confidence.
-3. **Defer Option B** to a later, explicitly-scoped milestone with a ToS/privacy review (Six).
-4. Model already supports partial snapshots (`sessionPercent?`, etc.) — **no model change needed**. Dashboard should gracefully render a card that only has `planName` + `dailyTokenUsage`.
-5. New research gap for One: confirm Codex `plan_type` value set (`plus`, `pro`, `team`, `enterprise`?) and whether `secondary` is always the weekly window.
+1. **Step 4 = Codex adapter**, local-file only. High confidence, ~1 day. Full `UsageSnapshot` parity with the fixture. ✅ shipped (PR #6/#8).
+2. **Step 5 = Claude adapter, Option A** (token/chart only, percentages `nil`). Medium confidence. In progress.
+3. **Step 5.5 (proposed) = Gemini CLI adapter** — near-copy of the Claude adapter (local files, tokens only). Reuses the shared `newTokens` + daily-bucketing helpers. Low effort once step 5 lands. Adds `ProviderID.gemini`.
+4. **"Network adapters" milestone (after step 6 signing)** = Claude `/usage` (Option B) **+ DeepSeek balance**. Both need Keychain + a settings UI for credentials + a ToS/privacy review (Six). This is where `UsageSnapshot` gains an optional `balance` concept.
+5. **`ProviderID` scaling:** fine as an `enum` while providers are hardcoded (add a case + a `ProviderStyle` entry each). If providers ever become user-toggleable, refactor to a string id + self-describing `UsageProvider` (`displayName`/`symbolName`/`accentColor` on the provider) so the dashboard iterates a registry instead of `.allCases`.
+6. **UX:** 3+ stacked cards in the 360 pt menu panel will scroll — hand Two a compact/collapsible card mode before the Gemini adapter merges.
+7. Model already supports partial snapshots (`sessionPercent?`, etc.) — **no model change** for Codex/Claude/Gemini. Only DeepSeek forces a `balance` field.
 
 ---
 
@@ -161,5 +255,9 @@ These are fetched live from Anthropic's server by the CLI and rendered in `/usag
 
 - [ ] Does Codex ever write usage outside `sessions/` (e.g. a summary cache)? Not observed, not exhaustively checked.
 - [ ] Claude Code config/keychain: exact credential location on this install (`.credentials.json` vs Keychain) — only needed if Option B is ever approved.
-- [ ] Both: behaviour when the user is signed out / on a metered API key instead of a subscription.
-- [ ] Confirm formats against a second machine / newer CLI build before locking the adapter contract.
+- [ ] All CLIs: behaviour when the user is signed out / on a metered API key instead of a subscription.
+- [ ] Confirm formats against a second machine / newer CLI build before locking each adapter contract.
+- [ ] Gemini CLI: does a paid Code Assist / Vertex tier write rate-limit or quota data anywhere? Only `oauth-personal` (free) was observed.
+- [ ] Gemini CLI: confirm `tokens.total == input + output + thoughts` holds across model families (checked only `gemini-3-flash-preview`).
+- [ ] DeepSeek: is there any per-day spend endpoint, or is `/user/balance` (point-in-time) genuinely the only one? Balance-delta snapshotting is the fallback.
+- [ ] DeepSeek: does the account here even have API credits, or is it web-chat only? (No local footprint to confirm usage.)
