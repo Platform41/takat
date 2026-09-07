@@ -1,0 +1,1 @@
+{"sessionId":"fake-session-2","projectHash":"fake-hash","startTime":"2026-09-05T10:00:00.000Z","messages":[{"id":"m1","timestamp":"2026-09-05T10:00:00.000Z","type":"gemini","model":"gemini-3-flash-preview","tokens":{"input":500,"output":40,"cached":100,"thoughts":20,"tool":0,"total":560}}]}
