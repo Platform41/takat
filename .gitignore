@@ -9,3 +9,4 @@ dist/
 *.p8
 *.p12
 
+.DS_Store
