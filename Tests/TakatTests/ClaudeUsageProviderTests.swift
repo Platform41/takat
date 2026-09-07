@@ -117,6 +117,11 @@ final class ClaudeUsageProviderTests: XCTestCase {
             .appendingPathComponent("TakatClaudeTests-\(UUID().uuidString)", isDirectory: true)
     }
 
+    private func missingConfigFile() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("TakatClaudeTests-no-config-\(UUID().uuidString).json")
+    }
+
     private func writeFile(_ name: String, lines: [String], in dir: URL) {
         let url = dir.appendingPathComponent(name)
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -146,7 +151,7 @@ final class ClaudeUsageProviderTests: XCTestCase {
         writeFile("slug-a/a.jsonl", lines: [claudeLine(timestamp: iso.string(from: Date()), input: 100, output: 50)], in: dir)
         writeFile("slug-b/b.jsonl", lines: [claudeLine(timestamp: iso.string(from: Date()), input: 30)], in: dir)
 
-        let snapshot = try await ClaudeUsageProvider(projectsDirectory: dir).fetchUsage()
+        let snapshot = try await ClaudeUsageProvider(projectsDirectory: dir, configFile: missingConfigFile()).fetchUsage()
 
         let total = snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }
         XCTAssertEqual(total, 180)
@@ -166,7 +171,7 @@ final class ClaudeUsageProviderTests: XCTestCase {
         let oldDate = Date().addingTimeInterval(-30 * 24 * 3600)
         try? FileManager.default.setAttributes([.modificationDate: oldDate], ofItemAtPath: oldURL.path)
 
-        let snapshot = try await ClaudeUsageProvider(projectsDirectory: dir).fetchUsage()
+        let snapshot = try await ClaudeUsageProvider(projectsDirectory: dir, configFile: missingConfigFile()).fetchUsage()
 
         let total = snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }
         XCTAssertEqual(total, 100)
@@ -211,7 +216,7 @@ final class ClaudeUsageProviderTests: XCTestCase {
         let url = dir.appendingPathComponent("slug/stale.jsonl")
         try? FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-30 * 24 * 3600)], ofItemAtPath: url.path)
 
-        let snapshot = try await ClaudeUsageProvider(projectsDirectory: dir).fetchUsage()
+        let snapshot = try await ClaudeUsageProvider(projectsDirectory: dir, configFile: missingConfigFile()).fetchUsage()
 
         XCTAssertEqual(snapshot.planName, "Claude")
         XCTAssertEqual(snapshot.dailyTokenUsage.count, 7)
@@ -241,5 +246,34 @@ final class ClaudeUsageProviderTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+    }
+
+    func testPlanNameFromConfigFile() async throws {
+        let dir = makeProjectsDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        writeFile("slug/a.jsonl", lines: [claudeLine(timestamp: iso.string(from: Date()), input: 100, output: 50)], in: dir)
+
+        let configFile = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/claude-config/claude.json")
+
+        let snapshot = try await ClaudeUsageProvider(projectsDirectory: dir, configFile: configFile).fetchUsage()
+
+        XCTAssertEqual(snapshot.planName, "Pro")
+        XCTAssertEqual(snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }, 150)
+    }
+
+    func testMissingConfigFileFallsBackToClaude() async throws {
+        let dir = makeProjectsDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        writeFile("slug/a.jsonl", lines: [claudeLine(timestamp: iso.string(from: Date()), input: 100)], in: dir)
+
+        let missing = dir.appendingPathComponent("no-such-config.json")
+        let snapshot = try await ClaudeUsageProvider(projectsDirectory: dir, configFile: missing).fetchUsage()
+
+        XCTAssertEqual(snapshot.planName, "Claude")
+        XCTAssertEqual(snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }, 100)
     }
 }
