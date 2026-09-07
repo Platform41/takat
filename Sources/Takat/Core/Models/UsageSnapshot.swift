@@ -32,6 +32,8 @@ public enum ProviderID: String, CaseIterable, Sendable, Codable {
 
 public struct DailyTokenUsage: Equatable, Sendable, Codable {
     public let day: Date
+    /// Non-cached tokens processed that day: new input + cache writes + output + reasoning.
+    /// Excludes cached-context reads, which dominate raw per-turn totals.
     public let tokenCount: Int
 
     public init(day: Date, tokenCount: Int) {

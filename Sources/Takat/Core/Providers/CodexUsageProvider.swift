@@ -60,8 +60,7 @@ public struct CodexUsageProvider: UsageProvider {
 
     private func latestRateLimits(in files: [URL]) -> CodexRateLimits? {
         for file in files.prefix(3) {
-            let data = CodexSessionParser.parse(lines: lines(of: file))
-            if let rateLimits = data.rateLimits {
+            if let rateLimits = CodexSessionParser.parseRateLimitsOnly(lines: lines(of: file)) {
                 return rateLimits
             }
         }

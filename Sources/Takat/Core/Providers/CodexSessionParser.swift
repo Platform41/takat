@@ -6,12 +6,19 @@ struct CodexSessionData {
 }
 
 enum CodexSessionParser {
-    static func parse(lines: some Sequence<String>) -> CodexSessionData {
-        let withFractional = ISO8601DateFormatter()
-        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
+    nonisolated(unsafe) private static let fractionalTimestamp: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 
+    nonisolated(unsafe) private static let plainTimestamp: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    static func parse(lines: some Sequence<String>) -> CodexSessionData {
         let decoder = JSONDecoder()
         var data = CodexSessionData()
 
@@ -26,13 +33,41 @@ enum CodexSessionParser {
                 data.rateLimits = rateLimits
             }
 
-            if let tokens = event.payload.info?.last_token_usage?.total_tokens,
-               let date = withFractional.date(from: event.timestamp) ?? plain.date(from: event.timestamp) {
-                data.tokenDeltas.append((date, tokens))
+            if let lastTokenUsage = event.payload.info?.last_token_usage,
+               let date = fractionalTimestamp.date(from: event.timestamp) ?? plainTimestamp.date(from: event.timestamp) {
+                data.tokenDeltas.append((date, newTokens(lastTokenUsage)))
             }
         }
 
         return data
+    }
+
+    static func newTokens(_ usage: CodexTokenUsage) -> Int {
+        let input = usage.input_tokens ?? 0
+        let cached = usage.cached_input_tokens ?? 0
+        let cacheWrite = usage.cache_write_input_tokens ?? 0
+        let output = usage.output_tokens ?? 0
+        let reasoning = usage.reasoning_output_tokens ?? 0
+        return max(0, input - cached) + cacheWrite + output + reasoning
+    }
+
+    static func parseRateLimitsOnly(lines: some Sequence<String>) -> CodexRateLimits? {
+        let decoder = JSONDecoder()
+        var rateLimits: CodexRateLimits?
+
+        for line in lines {
+            guard !line.isEmpty else { continue }
+            guard let event = try? decoder.decode(CodexEvent.self, from: Data(line.utf8)) else {
+                continue
+            }
+            guard event.payload.type == "token_count" else { continue }
+
+            if let rl = event.payload.rate_limits {
+                rateLimits = rl
+            }
+        }
+
+        return rateLimits
     }
 
     static func dailyUsage(
@@ -81,7 +116,12 @@ struct CodexInfo: Decodable {
 }
 
 struct CodexTokenUsage: Decodable {
-    let total_tokens: Int
+    let input_tokens: Int?
+    let cached_input_tokens: Int?
+    let cache_write_input_tokens: Int?
+    let output_tokens: Int?
+    let reasoning_output_tokens: Int?
+    let total_tokens: Int?
 }
 
 struct CodexRateLimits: Decodable {
