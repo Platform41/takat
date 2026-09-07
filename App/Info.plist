@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>            <string>Takat</string>
+    <key>CFBundleDisplayName</key>     <string>Takat</string>
+    <key>CFBundleIdentifier</key>      <string>net.41labs.takat.llm</string>
+    <key>CFBundlePackageType</key>     <string>APPL</string>
+    <key>CFBundleExecutable</key>      <string>Takat</string>
+    <key>CFBundleShortVersionString</key> <string>__VERSION__</string>
+    <key>CFBundleVersion</key>         <string>__BUILD__</string>
+    <key>LSMinimumSystemVersion</key>  <string>26.0</string>
+    <key>LSUIElement</key>             <true/>
+    <key>NSHumanReadableCopyright</key><string>© 2026 41 Labs. MIT-licensed.</string>
+    <key>NSSupportsAutomaticTermination</key> <true/>
+    <key>NSSupportsSuddenTermination</key>    <true/>
+</dict>
+</plist>

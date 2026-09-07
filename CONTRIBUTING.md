@@ -10,4 +10,6 @@ Takat is a native macOS project. Contributions should preserve the macOS Human I
 - Include screenshots for meaningful dashboard or settings changes.
 - Document any provider-specific behavior or authentication requirement.
 
+The distributable app is assembled with `scripts/build-app.sh` (source of truth stays `Package.swift`).
+
 Small, focused pull requests are easier to review.

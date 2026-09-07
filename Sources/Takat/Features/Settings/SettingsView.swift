@@ -32,6 +32,15 @@ struct SettingsView: View {
             } footer: {
                 Text("Usage data is fixture-backed in this milestone. Live provider connections arrive in a later release.")
             }
+
+            Section {
+                Toggle("Open Takat at Login", isOn: Binding(
+                    get: { LoginItem.isEnabled },
+                    set: { LoginItem.setEnabled($0) }
+                ))
+            } footer: {
+                Text("Requires running Takat from /Applications. An unsigned build may need approval in System Settings → General → Login Items.")
+            }
         }
         .formStyle(.grouped)
         .frame(width: 420)
