@@ -8,7 +8,7 @@ final class UsageStoreTests: XCTestCase {
             FixtureUsageProvider(providerID: .claude),
             FixtureUsageProvider(providerID: .codex)
         ]
-        let store = UsageStore(providers: providers)
+        let store = UsageStore(providers: providers, cacheDirectory: nil)
 
         XCTAssertTrue(store.snapshots.isEmpty)
 
@@ -22,7 +22,7 @@ final class UsageStoreTests: XCTestCase {
     }
 
     func testFailingProviderRecordsError() async {
-        let store = UsageStore(providers: [ThrowingProvider()])
+        let store = UsageStore(providers: [ThrowingProvider()], cacheDirectory: nil)
 
         await store.refresh()
 
@@ -35,7 +35,7 @@ final class UsageStoreTests: XCTestCase {
             FixtureUsageProvider(providerID: .claude),
             ThrowingProvider()
         ]
-        let store = UsageStore(providers: providers)
+        let store = UsageStore(providers: providers, cacheDirectory: nil)
 
         await store.refresh()
 
@@ -49,7 +49,7 @@ final class UsageStoreTests: XCTestCase {
             DelayedProvider(providerID: .claude, delayNanoseconds: 200_000_000),
             DelayedProvider(providerID: .codex, delayNanoseconds: 200_000_000)
         ]
-        let store = UsageStore(providers: providers)
+        let store = UsageStore(providers: providers, cacheDirectory: nil)
 
         let clock = ContinuousClock()
         let elapsed = await clock.measure {
@@ -62,7 +62,7 @@ final class UsageStoreTests: XCTestCase {
 
     func testConcurrentRefreshIsGuarded() async {
         let provider = BlockingCountingProvider(providerID: .claude)
-        let store = UsageStore(providers: [provider])
+        let store = UsageStore(providers: [provider], cacheDirectory: nil)
 
         let first = Task { await store.refresh() }
 

@@ -32,6 +32,7 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 420)
         .task {
+            await store.loadPersistedSnapshots()
             if store.snapshots.isEmpty {
                 await store.refresh()
             }
