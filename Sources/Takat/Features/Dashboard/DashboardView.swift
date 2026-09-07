@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 enum ChartData {
     static func allZero(_ usage: [DailyTokenUsage]) -> Bool {
@@ -28,6 +29,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
             content
+            footer
         }
         .padding(16)
         .task {
@@ -41,6 +43,30 @@ struct DashboardView: View {
                 await store.refresh()
             }
         }
+    }
+
+    private var footer: some View {
+        VStack(spacing: 8) {
+            Divider()
+            HStack {
+                SettingsLink {
+                    Label("Settings…", systemImage: "gearshape")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+
+                Spacer()
+
+                Button {
+                    NSApplication.shared.terminate(nil)
+                } label: {
+                    Label("Quit Takat", systemImage: "power")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .foregroundStyle(.secondary)
     }
 
     private var header: some View {
@@ -97,6 +123,7 @@ struct DashboardView: View {
                     HStack(spacing: 4) {
                         ProviderMark(provider: provider, size: 12)
                         Text(provider.displayName)
+                            .lineLimit(1)
                         if store.errors[provider] != nil {
                             Circle()
                                 .fill(.orange)
