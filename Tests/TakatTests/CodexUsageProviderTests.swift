@@ -4,12 +4,16 @@ import XCTest
 final class CodexSessionParserTests: XCTestCase {
     private func tokenCountLine(
         timestamp: String,
-        totalTokens: Int,
+        input: Int,
+        cached: Int = 0,
+        cacheWrite: Int = 0,
+        output: Int = 0,
+        reasoning: Int = 0,
         sessionPercent: Double,
         weeklyPercent: Double,
         planType: String
     ) -> String {
-        #"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"total_tokens":\#(totalTokens)}},"rate_limits":{"primary":{"used_percent":\#(sessionPercent),"window_minutes":300,"resets_at":1788690513},"secondary":{"used_percent":\#(weeklyPercent),"window_minutes":10080,"resets_at":1788748053},"plan_type":"\#(planType)","limit_id":"codex"}}}"#
+        #"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":\#(input),"cached_input_tokens":\#(cached),"cache_write_input_tokens":\#(cacheWrite),"output_tokens":\#(output),"reasoning_output_tokens":\#(reasoning)}},"rate_limits":{"primary":{"used_percent":\#(sessionPercent),"window_minutes":300,"resets_at":1788690513},"secondary":{"used_percent":\#(weeklyPercent),"window_minutes":10080,"resets_at":1788748053},"plan_type":"\#(planType)","limit_id":"codex"}}}"#
     }
 
     private func sessionMetaLine(timestamp: String) -> String {
@@ -18,8 +22,8 @@ final class CodexSessionParserTests: XCTestCase {
 
     func testExtractsLastRateLimits() {
         let lines = [
-            tokenCountLine(timestamp: "2026-09-06T06:50:06.843Z", totalTokens: 100, sessionPercent: 10, weeklyPercent: 20, planType: "plus"),
-            tokenCountLine(timestamp: "2026-09-06T06:51:06.843Z", totalTokens: 150, sessionPercent: 12, weeklyPercent: 22, planType: "pro")
+            tokenCountLine(timestamp: "2026-09-06T06:50:06.843Z", input: 100, sessionPercent: 10, weeklyPercent: 20, planType: "plus"),
+            tokenCountLine(timestamp: "2026-09-06T06:51:06.843Z", input: 200, cached: 100, output: 50, sessionPercent: 12, weeklyPercent: 22, planType: "pro")
         ]
 
         let data = CodexSessionParser.parse(lines: lines)
@@ -31,6 +35,28 @@ final class CodexSessionParserTests: XCTestCase {
         XCTAssertEqual(data.tokenDeltas.last?.1, 150)
     }
 
+    func testNewTokensMath() {
+        XCTAssertEqual(
+            CodexSessionParser.newTokens(
+                CodexTokenUsage(input_tokens: 1000, cached_input_tokens: 900, cache_write_input_tokens: 0, output_tokens: 200, reasoning_output_tokens: 50, total_tokens: nil)
+            ),
+            350
+        )
+        XCTAssertEqual(
+            CodexSessionParser.newTokens(
+                CodexTokenUsage(input_tokens: 900, cached_input_tokens: 900, cache_write_input_tokens: 0, output_tokens: 0, reasoning_output_tokens: 0, total_tokens: nil)
+            ),
+            0
+        )
+    }
+
+    func testFullyCachedTurnContributesZeroToBucket() {
+        let line = tokenCountLine(timestamp: "2026-09-06T06:50:06.843Z", input: 900, cached: 900, output: 0, sessionPercent: 10, weeklyPercent: 20, planType: "plus")
+        let data = CodexSessionParser.parse(lines: [line])
+
+        XCTAssertEqual(data.tokenDeltas.map(\.1), [0])
+    }
+
     func testPlanNameMapping() {
         XCTAssertEqual(CodexSessionParser.planName(from: "plus"), "Plus")
         XCTAssertEqual(CodexSessionParser.planName(from: "pro"), "Pro")
@@ -40,7 +66,7 @@ final class CodexSessionParserTests: XCTestCase {
     }
 
     func testToleratesCorruptFinalLine() {
-        let valid = tokenCountLine(timestamp: "2026-09-06T06:50:06.843Z", totalTokens: 100, sessionPercent: 10, weeklyPercent: 20, planType: "plus")
+        let valid = tokenCountLine(timestamp: "2026-09-06T06:50:06.843Z", input: 100, sessionPercent: 10, weeklyPercent: 20, planType: "plus")
         let lines = [
             sessionMetaLine(timestamp: "2026-09-06T06:00:00.000Z"),
             valid,
@@ -95,12 +121,16 @@ final class CodexUsageProviderTests: XCTestCase {
 
     private func tokenCountLine(
         timestamp: String,
-        totalTokens: Int,
+        input: Int,
+        cached: Int = 0,
+        cacheWrite: Int = 0,
+        output: Int = 0,
+        reasoning: Int = 0,
         sessionPercent: Double,
         weeklyPercent: Double,
         planType: String
     ) -> String {
-        #"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"total_tokens":\#(totalTokens)}},"rate_limits":{"primary":{"used_percent":\#(sessionPercent),"window_minutes":300,"resets_at":1788690513},"secondary":{"used_percent":\#(weeklyPercent),"window_minutes":10080,"resets_at":1788748053},"plan_type":"\#(planType)","limit_id":"codex"}}}"#
+        #"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":\#(input),"cached_input_tokens":\#(cached),"cache_write_input_tokens":\#(cacheWrite),"output_tokens":\#(output),"reasoning_output_tokens":\#(reasoning)}},"rate_limits":{"primary":{"used_percent":\#(sessionPercent),"window_minutes":300,"resets_at":1788690513},"secondary":{"used_percent":\#(weeklyPercent),"window_minutes":10080,"resets_at":1788748053},"plan_type":"\#(planType)","limit_id":"codex"}}}"#
     }
 
     private func sessionMetaLine(timestamp: String) -> String {
@@ -134,7 +164,7 @@ final class CodexUsageProviderTests: XCTestCase {
             "rollout-a.jsonl",
             lines: [
                 sessionMetaLine(timestamp: "2026-09-05T10:00:00.000Z"),
-                tokenCountLine(timestamp: "2026-09-05T10:05:00.000Z", totalTokens: 200, sessionPercent: 8, weeklyPercent: 40, planType: "plus")
+                tokenCountLine(timestamp: "2026-09-05T10:05:00.000Z", input: 200, sessionPercent: 8, weeklyPercent: 40, planType: "plus")
             ],
             in: dir
         )
@@ -184,7 +214,7 @@ final class CodexUsageProviderTests: XCTestCase {
             "rollout-real.jsonl",
             lines: [
                 sessionMetaLine(timestamp: "2026-09-06T10:00:00.000Z"),
-                tokenCountLine(timestamp: "2026-09-06T10:05:00.000Z", totalTokens: 300, sessionPercent: 15, weeklyPercent: 88, planType: "team")
+                tokenCountLine(timestamp: "2026-09-06T10:05:00.000Z", input: 300, sessionPercent: 15, weeklyPercent: 88, planType: "team")
             ],
             in: dir
         )
@@ -207,8 +237,8 @@ final class CodexUsageProviderTests: XCTestCase {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
-        let todayLine = tokenCountLine(timestamp: iso.string(from: now), totalTokens: 111, sessionPercent: 5, weeklyPercent: 5, planType: "plus")
-        let yesterdayLine = tokenCountLine(timestamp: iso.string(from: yesterday), totalTokens: 222, sessionPercent: 5, weeklyPercent: 5, planType: "plus")
+        let todayLine = tokenCountLine(timestamp: iso.string(from: now), input: 200, cached: 100, output: 11, sessionPercent: 5, weeklyPercent: 5, planType: "plus")
+        let yesterdayLine = tokenCountLine(timestamp: iso.string(from: yesterday), input: 300, cached: 78, sessionPercent: 5, weeklyPercent: 5, planType: "plus")
 
         writeSessionFile(
             "rollout-recent.jsonl",
