@@ -3,13 +3,13 @@ import XCTest
 
 final class DashboardPolishTests: XCTestCase {
     func testAllZero() {
-        XCTAssertTrue(allZero([]))
-        XCTAssertTrue(allZero([
+        XCTAssertTrue(ChartData.allZero([]))
+        XCTAssertTrue(ChartData.allZero([
             DailyTokenUsage(day: Date(), tokenCount: 0),
             DailyTokenUsage(day: Date(), tokenCount: 0),
             DailyTokenUsage(day: Date(), tokenCount: 0)
         ]))
-        XCTAssertFalse(allZero([
+        XCTAssertFalse(ChartData.allZero([
             DailyTokenUsage(day: Date(), tokenCount: 0),
             DailyTokenUsage(day: Date(), tokenCount: 5),
             DailyTokenUsage(day: Date(), tokenCount: 0)

@@ -1,7 +1,9 @@
 import SwiftUI
 
-func allZero(_ usage: [DailyTokenUsage]) -> Bool {
-    usage.isEmpty || usage.allSatisfy { $0.tokenCount == 0 }
+enum ChartData {
+    static func allZero(_ usage: [DailyTokenUsage]) -> Bool {
+        usage.isEmpty || usage.allSatisfy { $0.tokenCount == 0 }
+    }
 }
 
 struct DashboardView: View {
@@ -260,7 +262,7 @@ private struct DailyUsageChart: View {
     }
 
     var body: some View {
-        if allZero(usage) {
+        if ChartData.allZero(usage) {
             Text("No usage in the last 7 days")
                 .font(.caption)
                 .foregroundStyle(.secondary)
