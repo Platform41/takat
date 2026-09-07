@@ -27,6 +27,16 @@ Early prototype with a fixture-backed dashboard. The repository contains the nat
 - **Build the app:** `./scripts/build-app.sh` → `dist/Takat.app`; drag to `/Applications`; first launch: right-click → Open (unsigned).
 - **Start at login:** toggle in Takat → Settings (⌘,).
 
+## Releasing (maintainer-only)
+
+See `docs/runbooks/release.md` for the full sequence. In short: set up the Developer ID cert + `takat-notary` keychain profile once, then
+
+```bash
+TAKAT_SIGN_ID="Developer ID Application: 41 LABS SDN. BHD. (R798HXVTJ5)" ./scripts/release-app.sh
+```
+
+produces a notarized, stapled `dist/Takat-<version>.zip`. A plain `./scripts/build-app.sh` (no env var) still gives an ad-hoc build for local testing.
+
 ## Requirements
 
 - macOS Tahoe 26 or later

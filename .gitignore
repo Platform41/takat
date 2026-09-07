@@ -5,4 +5,8 @@ DerivedData/
 *.xcworkspace/xcuserdata/
 *.xcuserstate
 dist/
+.signing.local
+*.p8
+*.p12
 
+.DS_Store

@@ -7,6 +7,7 @@
     <key>CFBundleIdentifier</key>      <string>net.41labs.takat.llm</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
     <key>CFBundleExecutable</key>      <string>Takat</string>
+    <key>CFBundleIconFile</key>         <string>Takat</string>
     <key>CFBundleShortVersionString</key> <string>__VERSION__</string>
     <key>CFBundleVersion</key>         <string>__BUILD__</string>
     <key>LSMinimumSystemVersion</key>  <string>26.0</string>
