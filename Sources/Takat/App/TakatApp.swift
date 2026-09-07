@@ -6,7 +6,7 @@ struct TakatApp: App {
 
     init() {
         let providers: [any UsageProvider] = [
-            FixtureUsageProvider(providerID: .claude),
+            ClaudeUsageProvider(),
             CodexUsageProvider()
         ]
         _store = State(initialValue: UsageStore(providers: providers))

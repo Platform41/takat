@@ -100,10 +100,16 @@ private struct ProviderCardView: View {
 
             freshnessRow
 
-            UsageBar(title: "Session", percent: snapshot.sessionPercent)
-                .tint(snapshot.provider.accentColor)
-            UsageBar(title: "Weekly", percent: snapshot.weeklyPercent)
-                .tint(snapshot.provider.accentColor)
+            if snapshot.sessionPercent == nil && snapshot.weeklyPercent == nil {
+                Text("Session and weekly limits aren't reported by Claude.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                UsageBar(title: "Session", percent: snapshot.sessionPercent)
+                    .tint(snapshot.provider.accentColor)
+                UsageBar(title: "Weekly", percent: snapshot.weeklyPercent)
+                    .tint(snapshot.provider.accentColor)
+            }
 
             if let resetDate = snapshot.resetDate {
                 Text("Resets \(resetDate, format: .dateTime.month(.abbreviated).day())")
