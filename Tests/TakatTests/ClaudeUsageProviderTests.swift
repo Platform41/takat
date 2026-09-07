@@ -276,4 +276,23 @@ final class ClaudeUsageProviderTests: XCTestCase {
         XCTAssertEqual(snapshot.planName, "Claude")
         XCTAssertEqual(snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }, 100)
     }
+
+    func testUtilizationFromConfigFile() async throws {
+        let dir = makeProjectsDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        writeFile("slug/a.jsonl", lines: [claudeLine(timestamp: iso.string(from: Date()), input: 100, output: 50)], in: dir)
+
+        let configFile = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/claude-config/claude-usage.json")
+
+        let snapshot = try await ClaudeUsageProvider(projectsDirectory: dir, configFile: configFile).fetchUsage()
+
+        XCTAssertEqual(snapshot.planName, "Pro")
+        XCTAssertEqual(snapshot.sessionPercent, 21)
+        XCTAssertEqual(snapshot.weeklyPercent, 32)
+        XCTAssertNotNil(snapshot.resetDate)
+        XCTAssertEqual(snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }, 150)
+    }
 }

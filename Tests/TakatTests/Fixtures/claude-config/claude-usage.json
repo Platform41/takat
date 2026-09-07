@@ -1,0 +1,9 @@
+{
+  "oauthAccount": { "organizationType": "claude_pro" },
+  "cachedUsageUtilization": {
+    "utilization": {
+      "five_hour": { "utilization": 21, "resets_at": "2099-09-07T15:39:59.661643+00:00" },
+      "seven_day": { "utilization": 32, "resets_at": "2099-09-07T21:59:59.661667+00:00" }
+    }
+  }
+}
