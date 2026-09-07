@@ -29,6 +29,8 @@ public enum ProviderID: String, CaseIterable, Sendable, Codable {
     case claude
     case codex
     case gemini
+
+    public static let displayOrder: [ProviderID] = [.claude, .codex, .gemini]
 }
 
 public struct DailyTokenUsage: Equatable, Sendable, Codable {

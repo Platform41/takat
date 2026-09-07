@@ -2,6 +2,20 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(UsageStore.self) private var store
+    @AppStorage("takat.selectedProvider") private var storedProviderRaw = ""
+
+    private var availableProviders: [ProviderID] {
+        ProviderSwitcher.switcherProviders(snapshots: Set(store.snapshots.keys))
+    }
+
+    private var effectiveProvider: ProviderID {
+        ProviderSwitcher.selectedProvider(stored: storedProviderRaw, available: availableProviders)
+            ?? .claude
+    }
+
+    private var oldestLastUpdated: Date? {
+        availableProviders.compactMap { store.lastUpdated(for: $0) }.min()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -23,7 +37,7 @@ struct DashboardView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Text("Takat")
                 .font(.title3.weight(.semibold))
             Spacer()
@@ -39,6 +53,12 @@ struct DashboardView: View {
             .buttonStyle(.borderless)
             .disabled(store.isRefreshing)
             .help("Refresh usage")
+
+            if let oldest = oldestLastUpdated {
+                Text("Updated \(oldest, format: .relative(presentation: .named))")
+                    .font(.caption)
+                    .foregroundStyle(RefreshPolicy.isStale(oldest) ? .orange : .secondary)
+            }
         }
     }
 
@@ -49,21 +69,57 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity, minHeight: 120)
         } else if store.snapshots.isEmpty {
             emptyState
+        } else if availableProviders.count == 1, let single = availableProviders.first {
+            providerCard(for: single)
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    ForEach(ProviderID.allCases, id: \.self) { providerID in
-                        if let snapshot = store.snapshot(for: providerID) {
-                            ProviderCardView(
-                                snapshot: snapshot,
-                                lastUpdated: store.lastUpdated(for: providerID),
-                                hasError: store.errors[providerID] != nil
-                            )
+            VStack(spacing: 12) {
+                providerSwitcher
+                providerCard(for: effectiveProvider)
+                    .animation(.easeInOut(duration: 0.15), value: effectiveProvider)
+            }
+        }
+    }
+
+    private var providerSwitcher: some View {
+        HStack(spacing: 2) {
+            ForEach(availableProviders, id: \.self) { provider in
+                let isSelected = effectiveProvider == provider
+                Button {
+                    storedProviderRaw = provider.rawValue
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: provider.symbolName)
+                        Text(provider.displayName)
+                        if store.errors[provider] != nil {
+                            Circle()
+                                .fill(.orange)
+                                .frame(width: 6, height: 6)
                         }
                     }
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+                .accessibilityLabel("\(provider.displayName)\(store.errors[provider] != nil ? ", attention needed" : "")")
             }
-            .frame(maxHeight: 480)
+        }
+        .padding(2)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func providerCard(for providerID: ProviderID) -> some View {
+        if let snapshot = store.snapshot(for: providerID) {
+            ProviderCardView(
+                snapshot: snapshot,
+                lastUpdated: store.lastUpdated(for: providerID),
+                hasError: store.errors[providerID] != nil
+            )
         }
     }
 
