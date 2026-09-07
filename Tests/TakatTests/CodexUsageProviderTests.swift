@@ -88,7 +88,7 @@ final class CodexSessionParserTests: XCTestCase {
         let delta1 = calendar.date(byAdding: .hour, value: 1, to: threeDaysAgo)!
         let delta2 = calendar.date(byAdding: .hour, value: 2, to: threeDaysAgo)!
 
-        let usage = CodexSessionParser.dailyUsage(
+        let usage = DailyUsageBucketing.dailyUsage(
             tokenDeltas: [(delta1, 100), (delta2, 50)],
             referenceDate: ref,
             calendar: calendar
