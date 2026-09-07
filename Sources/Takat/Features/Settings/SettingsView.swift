@@ -10,7 +10,11 @@ struct SettingsView: View {
                     LabeledContent {
                         statusText(for: providerID)
                     } label: {
-                        Label(providerID.displayName, systemImage: providerID.symbolName)
+                        Label {
+                            Text(providerID.displayName)
+                        } icon: {
+                            ProviderMark(provider: providerID, size: 14)
+                        }
                     }
                 }
             }

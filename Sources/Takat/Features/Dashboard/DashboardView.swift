@@ -95,7 +95,7 @@ struct DashboardView: View {
                     storedProviderRaw = provider.rawValue
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: provider.symbolName)
+                        ProviderMark(provider: provider, size: 12)
                         Text(provider.displayName)
                         if store.errors[provider] != nil {
                             Circle()
@@ -169,9 +169,13 @@ private struct ProviderCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label(snapshot.provider.displayName, systemImage: snapshot.provider.symbolName)
-                    .font(.headline)
-                    .foregroundStyle(snapshot.provider.accentColor)
+                Label {
+                    Text(snapshot.provider.displayName)
+                } icon: {
+                    ProviderMark(provider: snapshot.provider, size: 16)
+                }
+                .font(.headline)
+                .foregroundStyle(snapshot.provider.accentColor)
                 Spacer()
                 Text(snapshot.planName)
                     .font(.caption)

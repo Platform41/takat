@@ -9,14 +9,6 @@ extension ProviderID {
         }
     }
 
-    var symbolName: String {
-        switch self {
-        case .claude: "sparkles"
-        case .codex: "terminal"
-        case .gemini: "diamond"
-        }
-    }
-
     var accentColor: Color {
         switch self {
         case .claude: .orange
