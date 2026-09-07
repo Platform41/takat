@@ -50,7 +50,7 @@ public final class UsageStore {
             UsageCache.load(from: directory)
         }.value
 
-        guard let payload else { return }
+        guard let payload, snapshots.isEmpty else { return }
         snapshots = payload.snapshots
         lastUpdated = payload.lastUpdated
     }
