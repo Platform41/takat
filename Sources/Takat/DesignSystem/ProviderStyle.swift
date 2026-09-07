@@ -5,6 +5,7 @@ extension ProviderID {
         switch self {
         case .claude: "Claude"
         case .codex: "Codex"
+        case .gemini: "Gemini"
         }
     }
 
@@ -12,6 +13,7 @@ extension ProviderID {
         switch self {
         case .claude: "sparkles"
         case .codex: "terminal"
+        case .gemini: "diamond"
         }
     }
 
@@ -19,6 +21,7 @@ extension ProviderID {
         switch self {
         case .claude: .orange
         case .codex: .teal
+        case .gemini: .blue
         }
     }
 }

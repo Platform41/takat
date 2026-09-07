@@ -28,6 +28,7 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
 public enum ProviderID: String, CaseIterable, Sendable, Codable {
     case claude
     case codex
+    case gemini
 }
 
 public struct DailyTokenUsage: Equatable, Sendable, Codable {

@@ -18,8 +18,8 @@ public struct FixtureUsageProvider: UsageProvider {
 
         let tokenPattern: [Int]
         let planName: String
-        let sessionPercent: Double
-        let weeklyPercent: Double
+        let sessionPercent: Double?
+        let weeklyPercent: Double?
         let resetDate: Date?
 
         switch providerID {
@@ -43,6 +43,12 @@ public struct FixtureUsageProvider: UsageProvider {
                 matching: DateComponents(day: 1),
                 matchingPolicy: .nextTime
             )
+        case .gemini:
+            tokenPattern = [900, 600, 1200, 400, 1800, 200, 700]
+            planName = "Gemini"
+            sessionPercent = nil
+            weeklyPercent = nil
+            resetDate = nil
         }
 
         let daily: [DailyTokenUsage] = (0..<7).reversed().map { offset in
