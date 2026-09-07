@@ -4,15 +4,25 @@ public struct ClaudeUsageProvider: UsageProvider {
     public let providerID: ProviderID = .claude
 
     private let projectsDirectory: URL
+    private let configFile: URL
 
-    public init(projectsDirectory: URL = ClaudeUsageProvider.defaultProjectsDirectory) {
+    public init(
+        projectsDirectory: URL = ClaudeUsageProvider.defaultProjectsDirectory,
+        configFile: URL = ClaudeUsageProvider.defaultConfigFile
+    ) {
         self.projectsDirectory = projectsDirectory
+        self.configFile = configFile
     }
 
     public static var defaultProjectsDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude", isDirectory: true)
             .appendingPathComponent("projects", isDirectory: true)
+    }
+
+    public static var defaultConfigFile: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude.json", isDirectory: false)
     }
 
     public func fetchUsage() async throws -> UsageSnapshot {
@@ -55,12 +65,24 @@ public struct ClaudeUsageProvider: UsageProvider {
 
         return UsageSnapshot(
             provider: .claude,
-            planName: "Claude",
+            planName: planName(),
             sessionPercent: nil,
             weeklyPercent: nil,
             resetDate: nil,
             dailyTokenUsage: daily
         )
+    }
+
+    private func planName() -> String {
+        guard let data = readConfig() else { return "Claude" }
+        return ClaudePlanReader.planName(fromConfig: data)
+    }
+
+    private func readConfig() -> Data? {
+        let maxBytes: Int64 = 10 * 1024 * 1024
+        let size = (try? configFile.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+        guard size <= maxBytes else { return nil }
+        return try? Data(contentsOf: configFile)
     }
 
     private func projectFiles(in root: URL) -> [URL] {

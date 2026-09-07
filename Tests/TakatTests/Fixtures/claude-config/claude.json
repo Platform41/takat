@@ -1,0 +1,16 @@
+{
+  "oauthAccount": {
+    "organizationType": "claude_pro",
+    "billingType": "stripe_subscription",
+    "emailAddress": "SECRET-SENTINEL"
+  },
+  "mcpServers": {
+    "example": {
+      "command": "npx",
+      "args": [],
+      "env": {
+        "API_KEY": "SECRET-SENTINEL"
+      }
+    }
+  }
+}
