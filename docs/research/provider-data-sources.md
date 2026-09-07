@@ -101,6 +101,8 @@ None required — all data is local, world-readable-by-owner. `~/.codex/auth.jso
 | `stats-cache.json` | daily `messageCount`, `sessionCount`, `toolCallCount` — **not tokens**; recomputed lazily (observed `lastComputedDate` 2 months stale) | ⚠️ weak |
 | `history.jsonl` | prompt text + cwd + timestamp | ❌ no usage |
 | `total_tokens_reminder` events in transcripts | per-**agent-session** harness budget (e.g. cloud/CI runs), not subscription usage | ❌ misleading |
+| `~/.claude.json` → `oauthAccount` | `organizationType` (`"claude_pro"`, `"claude_max"`, …), `emailAddress`, `organizationUuid`, `billingType`, `hasExtraUsageEnabled` | ✅ **plan name is local after all** — see correction below |
+| Keychain item `Claude Code-credentials` | `{ "claudeAiOauth": { "accessToken": "sk-ant-oat01-…", "refreshToken", "expiresAt", … } }` | ✅ OAuth token for the `/usage` server endpoint (Option B) |
 
 ### `message.usage` shape (assistant messages)
 
@@ -119,22 +121,32 @@ None required — all data is local, world-readable-by-owner. `~/.codex/auth.jso
 - Subscription **session %** (the 5-hour window shown by `/usage` in the TUI)
 - **Weekly %**
 - **Reset timestamp**
-- Explicit **plan name** (Pro / Max 5x / Max 20x)
 
 These are fetched live from Anthropic's server by the CLI and rendered in `/usage`; no local cache file for them was found.
 
+### Correction (2026-09-07) — prompted by an Omarchy panel screenshot
+
+An Omarchy widget renders Claude Code **Session %, Weekly %, "Resets in Xh Ym", plan ("PRO"), tokens-by-day and tokens-by-model** — i.e. everything the fixture had. Re-investigation:
+
+1. **Plan name IS local.** `~/.claude.json` → `oauthAccount.organizationType` = `"claude_pro"` on this machine (→ "Pro"). Earlier scan only checked `~/.claude/settings.json` and `stats-cache.json` and missed `~/.claude.json`. **`planName` no longer needs to be a hardcoded `"Claude"`.**
+2. **Session/weekly % + resets are Option B, and Option B demonstrably works.** Omarchy calls the same server endpoint the in-session `/usage` command hits, authorised with the OAuth `accessToken` from the Keychain item `Claude Code-credentials`. There is no `claude usage` CLI subcommand and nothing on disk — the network call is the only route, but it is a proven one, not speculative.
+3. Exact endpoint + request headers still need confirming — read it out of Omarchy's widget script (`omarchy` repo) or capture what `/usage` sends. Token is an `sk-ant-oat01-…` bearer; the CLI uses an `anthropic-beta` OAuth header.
+
 ### Options for the Claude adapter (step 5)
 
-**Option A — local transcript parsing (recommended for first ship)**
-- Parse `projects/**/*.jsonl`, sum `output_tokens + input_tokens + cache_creation_input_tokens` (decide cache-read handling) per calendar day → `dailyTokenUsage`.
-- Optionally compute cost with a bundled model-price table (this is what community tool `ccusage` does).
-- `planName` = "Claude" or read from config if a field appears; `sessionPercent` / `weeklyPercent` / `resetDate` = **`nil`** → bars hide automatically.
-- Pros: no auth, no ToS risk, deterministic. Cons: no percentage bars.
+**Option A — local transcript parsing** — ✅ **shipped in PR #11.**
+- Parses `projects/**/*.jsonl`, `newTokens = input + cache_creation + output` per calendar day → `dailyTokenUsage`.
+- `planName = "Claude"` (hardcoded), `sessionPercent` / `weeklyPercent` / `resetDate` = `nil`.
+- No auth, no ToS risk, deterministic. No percentage bars.
 
-**Option B — reverse-engineer the `/usage` endpoint**
-- The CLI has OAuth credentials (macOS Keychain item `Claude Code-credentials`, or `~/.claude/.credentials.json` on some installs).
-- Call the same internal endpoint the TUI uses to get session/weekly %.
-- Pros: full parity with fixture. Cons: undocumented, unstable, Keychain access prompt, arguably against ToS. **Do not build this without an explicit product decision.**
+**Option A+ — local, plus plan name from `~/.claude.json`** — small follow-up, low risk.
+- Read `oauthAccount.organizationType` → map (`claude_pro`→"Pro", `claude_max`→"Max", else title-case / "Claude").
+- Still no bars. No network, no Keychain. **Recommended next Claude change.**
+
+**Option B — the `/usage` server endpoint** — feasible (Omarchy prior art), scoped milestone not "never".
+- OAuth `accessToken` from Keychain `Claude Code-credentials` → GET the endpoint behind `/usage` → session %, weekly %, reset timestamps.
+- Needs: exact endpoint confirmed; Keychain read (system prompt unless the signed bundle is entitled — step 6); a settings toggle so the user opts in; **Six's ToS/privacy review** (undocumented endpoint, token handling).
+- Bundle with the **"network adapters" milestone** (DeepSeek balance, same infrastructure).
 
 ### Trap doors
 
@@ -241,10 +253,11 @@ API key, stored in the **macOS Keychain** — same infrastructure as the deferre
 
 ## Recommended delivery impact
 
-1. **Step 4 = Codex adapter**, local-file only. High confidence, ~1 day. Full `UsageSnapshot` parity with the fixture. ✅ shipped (PR #6/#8).
-2. **Step 5 = Claude adapter, Option A** (token/chart only, percentages `nil`). Medium confidence. In progress.
-3. **Step 5.5 (proposed) = Gemini CLI adapter** — near-copy of the Claude adapter (local files, tokens only). Reuses the shared `newTokens` + daily-bucketing helpers. Low effort once step 5 lands. Adds `ProviderID.gemini`.
-4. **"Network adapters" milestone (after step 6 signing)** = Claude `/usage` (Option B) **+ DeepSeek balance**. Both need Keychain + a settings UI for credentials + a ToS/privacy review (Six). This is where `UsageSnapshot` gains an optional `balance` concept.
+1. **Step 4 = Codex adapter**, local-file only. ✅ shipped (PR #6/#8).
+2. **Step 5 = Claude adapter, Option A** (token/chart only, percentages `nil`). ✅ shipped (PR #11).
+3. **Step 5.5 = Gemini CLI adapter** — near-copy of Claude. ✅ shipped (PR #13).
+4. **Step 5.6 (new) = Claude Option A+** — read `planName` from `~/.claude.json`. Tiny, local, no auth. Do this soon; it also matters for the Codex card consistency (all cards should show a real plan).
+5. **"Network adapters" milestone (after step 6 signing)** = Claude Option B (`/usage` endpoint → session/weekly/reset bars — **feasible, Omarchy prior art**) **+ DeepSeek balance**. Both need Keychain + a settings UI for credentials + a ToS/privacy review (Six). This is where `UsageSnapshot` gains an optional `balance` concept and where the Claude card finally gets its bars.
 5. **`ProviderID` scaling:** fine as an `enum` while providers are hardcoded (add a case + a `ProviderStyle` entry each). If providers ever become user-toggleable, refactor to a string id + self-describing `UsageProvider` (`displayName`/`symbolName`/`accentColor` on the provider) so the dashboard iterates a registry instead of `.allCases`.
 6. **UX:** 3+ stacked cards in the 360 pt menu panel will scroll — hand Two a compact/collapsible card mode before the Gemini adapter merges.
 7. Model already supports partial snapshots (`sessionPercent?`, etc.) — **no model change** for Codex/Claude/Gemini. Only DeepSeek forces a `balance` field.
