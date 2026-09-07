@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- No sandbox: Takat reads ~/.codex / ~/.claude / ~/.gemini dotfiles. -->
-    <!-- Hardened runtime is applied via `codesign --options runtime`. -->
+    <!-- No sandbox: Takat reads the ~/.codex, ~/.claude, and ~/.gemini dotfiles. -->
+    <!-- Hardened runtime is applied via the runtime codesign option. -->
     <!-- keychain-access-groups is deferred until the DeepSeek adapter lands. -->
 </dict>
 </plist>
