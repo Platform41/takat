@@ -9,7 +9,7 @@ struct SettingsView: View {
                 ForEach(ProviderID.allCases, id: \.self) { providerID in
                     LabeledContent {
                         statusText(for: providerID)
-                    }                     label: {
+                    } label: {
                         Label {
                             Text(providerID.displayName)
                         } icon: {

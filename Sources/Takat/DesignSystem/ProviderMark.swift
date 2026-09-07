@@ -2,7 +2,12 @@ import SwiftUI
 
 struct ProviderMark: View {
     let provider: ProviderID
-    var size: CGFloat = 14
+    @ScaledMetric private var size: CGFloat
+
+    init(provider: ProviderID, size: CGFloat = 14) {
+        self.provider = provider
+        self._size = ScaledMetric(wrappedValue: size)
+    }
 
     var body: some View {
         Canvas { context, canvasSize in
@@ -29,7 +34,7 @@ struct ProviderMark: View {
         let c = CGPoint(x: rect.midX, y: rect.midY)
         let s = min(rect.width, rect.height)
         let outer = s * 0.5
-        let inner = s * 0.16
+        let inner = s * 0.06
 
         func point(degrees: CGFloat, radius: CGFloat) -> CGPoint {
             let a = degrees * .pi / 180
