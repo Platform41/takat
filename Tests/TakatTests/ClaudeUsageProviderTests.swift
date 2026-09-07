@@ -219,4 +219,27 @@ final class ClaudeUsageProviderTests: XCTestCase {
         XCTAssertNil(snapshot.sessionPercent)
         XCTAssertNil(snapshot.weeklyPercent)
     }
+
+    func testUnavailableWhenFilesCannotBeRead() async {
+        let dir = makeProjectsDir()
+        let unreadable = dir.appendingPathComponent("slug/a.jsonl")
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: unreadable.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+
+        writeFile("slug/a.jsonl", lines: [claudeLine(timestamp: iso.string(from: Date()), input: 5, output: 5)], in: dir)
+        try? FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: unreadable.path)
+
+        let provider = ClaudeUsageProvider(projectsDirectory: dir)
+
+        do {
+            _ = try await provider.fetchUsage()
+            XCTFail("Expected .unavailable")
+        } catch let error as UsageProviderError {
+            XCTAssertEqual(error, .unavailable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }

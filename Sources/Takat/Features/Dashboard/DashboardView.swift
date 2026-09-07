@@ -50,15 +50,20 @@ struct DashboardView: View {
         } else if store.snapshots.isEmpty {
             emptyState
         } else {
-            ForEach(ProviderID.allCases, id: \.self) { providerID in
-                if let snapshot = store.snapshot(for: providerID) {
-                    ProviderCardView(
-                        snapshot: snapshot,
-                        lastUpdated: store.lastUpdated(for: providerID),
-                        hasError: store.errors[providerID] != nil
-                    )
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(ProviderID.allCases, id: \.self) { providerID in
+                        if let snapshot = store.snapshot(for: providerID) {
+                            ProviderCardView(
+                                snapshot: snapshot,
+                                lastUpdated: store.lastUpdated(for: providerID),
+                                hasError: store.errors[providerID] != nil
+                            )
+                        }
+                    }
                 }
             }
+            .frame(maxHeight: 480)
         }
     }
 
@@ -101,7 +106,7 @@ private struct ProviderCardView: View {
             freshnessRow
 
             if snapshot.sessionPercent == nil && snapshot.weeklyPercent == nil {
-                Text("Session and weekly limits aren't reported by Claude.")
+                Text("Session and weekly limits aren't reported by \(snapshot.provider.displayName).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {

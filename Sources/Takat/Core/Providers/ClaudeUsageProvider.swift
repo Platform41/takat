@@ -33,9 +33,18 @@ public struct ClaudeUsageProvider: UsageProvider {
         let cutoff = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now)) ?? now
 
         var deltas: [(Date, Int)] = []
+        var inWindowCount = 0
+        var successfulReads = 0
         for file in files {
             guard modificationDate(of: file) >= cutoff else { continue }
-            deltas.append(contentsOf: ClaudeSessionParser.parse(lines: lines(of: file)))
+            inWindowCount += 1
+            guard let data = readData(of: file) else { continue }
+            successfulReads += 1
+            deltas.append(contentsOf: ClaudeSessionParser.parse(lines: JSONLLines(data: data)))
+        }
+
+        if inWindowCount > 0 && successfulReads == 0 {
+            throw UsageProviderError.unavailable
         }
 
         let daily = DailyUsageBucketing.dailyUsage(
@@ -88,10 +97,10 @@ public struct ClaudeUsageProvider: UsageProvider {
         (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
     }
 
-    private func lines(of url: URL) -> JSONLLines {
+    private func readData(of url: URL) -> Data? {
         let maxBytes: Int64 = 200 * 1024 * 1024
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
-        guard size <= maxBytes else { return JSONLLines(data: Data()) }
-        return JSONLLines(data: (try? Data(contentsOf: url)) ?? Data())
+        guard size <= maxBytes else { return nil }
+        return try? Data(contentsOf: url)
     }
 }
