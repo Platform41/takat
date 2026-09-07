@@ -228,22 +228,32 @@ None — local files, `oauth-personal` login already done by the CLI.
 
 Checked: no `~/.deepseek`, no `~/.config/deepseek`, no first-party CLI on this machine. DeepSeek is **pay-as-you-go API credit**, not a subscription with a session/weekly quota. "My DeepSeek subscription" = a prepaid dollar balance.
 
-### What's available
+### What's available — confirmed against api-docs.deepseek.com (2026-09-07)
 
 | Source | Data | Notes |
 |---|---|---|
-| `GET https://api.deepseek.com/user/balance` | `{ is_available, balance_infos: [{ currency, total_balance, granted_balance, topped_up_balance }] }` | Auth: `Authorization: Bearer <API_KEY>`. The **only** first-party usage signal. |
-| Chat completions response `usage` | `{ prompt_tokens, completion_tokens, total_tokens, prompt_cache_hit_tokens, prompt_cache_miss_tokens }` | Per-call only — no server-side history endpoint. Useful only if Takat itself proxied the calls, which it doesn't. |
-| platform.deepseek.com web dashboard | spend graphs, request counts | Human-only; no documented API. |
-| Third-party tools (aider / cline / opencode / …) using a DeepSeek key | that tool's own local logs | Tool-specific; out of scope. |
+| `GET https://api.deepseek.com/user/balance` | `{ is_available: Bool, balance_infos: [{ currency: "CNY"｜"USD", total_balance, granted_balance, topped_up_balance }] }` (balances are **strings**) | Auth: `Authorization: Bearer <API_KEY>`. **Point-in-time only** — no time window, no history, no expiry breakdown. The only first-party signal. |
+| Chat completions response `usage` | `{ prompt_tokens, completion_tokens, total_tokens, prompt_cache_hit_tokens, prompt_cache_miss_tokens }` | Per-call only — no server-side history endpoint. Useless to Takat (it doesn't proxy the calls). |
+| Rate limits | **concurrency caps only** (e.g. 500 concurrent for the pro model), surfaced as HTTP 429 | Docs explicitly state: no headers for remaining quota or reset, no usage endpoint, no weekly/session quota. |
+| platform.deepseek.com/usage | spend graphs, request counts | Web dashboard, **no documented API behind it**. |
+| Third-party tools (aider / cline / …) using a DeepSeek key | that tool's own local logs | Tool-specific; out of scope. |
+
+### Verdict: **session / weekly / reset bars are impossible for DeepSeek** — not deferred, not-going-to-happen
+
+DeepSeek's pay-as-you-go model has no subscription quota, so there is nothing for those bars to show. The API confirms it: balance snapshot + `is_available`, nothing else.
 
 ### Mapping to `UsageSnapshot`
 
-Doesn't fit the percentage model. A DeepSeek card would show **"$X.XX credits remaining"**, optionally a spend sparkline derived from snapshotting the balance over time (store daily balance readings, chart the deltas).
+A DeepSeek card can show:
+- **"$X.XX remaining"** from `balance_infos` (prefer the `USD` entry; `total_balance`).
+- a **status** from `is_available` ("OK" / "Low — top up").
+- optionally a **spend sparkline** Takat builds itself: persist the daily balance reading, chart `previous − current` per day. Caveats: only works after Takat has run for several days; a top-up makes the delta negative → clamp to 0 and/or annotate; not a token count.
 
-**Model change required** (do not add speculatively — only when this adapter is scheduled):
-- optional `balanceRemaining: Decimal?` + `balanceCurrency: String?` on `UsageSnapshot`, or a small `Balance` value type.
-- `dailyTokenUsage` stays empty for DeepSeek unless we start persisting balance deltas.
+`sessionPercent` / `weeklyPercent` / `resetDate` / `dailyTokenUsage` all stay `nil`/empty.
+
+**Model change required** (only when this adapter is scheduled):
+- optional `balanceRemaining: Decimal?` + `balanceCurrency: String?` on `UsageSnapshot` (or a small `Balance` type).
+- the card layout needs a "balance" treatment distinct from the percent-bars layout — a Two task.
 
 ### Auth
 
@@ -272,5 +282,5 @@ API key, stored in the **macOS Keychain** — same infrastructure as the deferre
 - [ ] Confirm formats against a second machine / newer CLI build before locking each adapter contract.
 - [ ] Gemini CLI: does a paid Code Assist / Vertex tier write rate-limit or quota data anywhere? Only `oauth-personal` (free) was observed.
 - [ ] Gemini CLI: confirm `tokens.total == input + output + thoughts` holds across model families (checked only `gemini-3-flash-preview`).
-- [ ] DeepSeek: is there any per-day spend endpoint, or is `/user/balance` (point-in-time) genuinely the only one? Balance-delta snapshotting is the fallback.
+- [x] DeepSeek: is there any per-day spend endpoint? **No** — confirmed against api-docs.deepseek.com (2026-09-07). `/user/balance` (point-in-time) is the only signal; rate limits are concurrency-only. Balance-delta snapshotting is the only path to a chart.
 - [ ] DeepSeek: does the account here even have API credits, or is it web-chat only? (No local footprint to confirm usage.)
