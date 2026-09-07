@@ -8,6 +8,16 @@ final class UsageStorePersistenceTests: XCTestCase {
             .appendingPathComponent("TakatTests-\(UUID().uuidString)", isDirectory: true)
     }
 
+    private func seedCache(_ dir: URL, provider: ProviderID, planName: String) {
+        let snapshot = UsageSnapshot(provider: provider, planName: planName)
+        let payload = UsageCache.Payload(
+            schema: UsageCache.schemaVersion,
+            snapshots: [provider: snapshot],
+            lastUpdated: [provider: Date.distantPast]
+        )
+        UsageCache.save(payload, to: dir)
+    }
+
     func testPersistenceRoundTrip() async {
         let dir = tempCacheDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -76,6 +86,46 @@ final class UsageStorePersistenceTests: XCTestCase {
         XCTAssertNil(store.errors[.codex])
         XCTAssertNotNil(store.snapshot(for: .codex))
     }
+
+    func testFreshRefreshWinsOverConcurrentCacheLoad() async {
+        let dir = tempCacheDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        seedCache(dir, provider: .claude, planName: "Cached")
+
+        let store = UsageStore(
+            providers: [PlanProvider(providerID: .claude, planName: "Fresh")],
+            cacheDirectory: dir
+        )
+
+        async let load: Void = store.loadPersistedSnapshots()
+        async let refresh: Void = store.refresh()
+        _ = await (load, refresh)
+
+        XCTAssertEqual(store.snapshot(for: .claude)?.planName, "Fresh")
+    }
+
+    func testLoadDoesNotClobberAlreadyRefreshedSnapshots() async {
+        let dir = tempCacheDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        seedCache(dir, provider: .claude, planName: "Cached")
+
+        let store = UsageStore(
+            providers: [PlanProvider(providerID: .claude, planName: "Fresh")],
+            cacheDirectory: dir
+        )
+
+        await store.refresh()
+        XCTAssertEqual(store.snapshot(for: .claude)?.planName, "Fresh")
+
+        // Re-seed stale data to simulate a disk read resolving after refresh.
+        seedCache(dir, provider: .claude, planName: "Cached")
+
+        await store.loadPersistedSnapshots()
+
+        XCTAssertEqual(store.snapshot(for: .claude)?.planName, "Fresh")
+    }
 }
 
 private final class FlakyProvider: UsageProvider, @unchecked Sendable {
@@ -93,5 +143,14 @@ private final class FlakyProvider: UsageProvider, @unchecked Sendable {
             throw UsageProviderError.unauthorized
         }
         return FixtureUsageProvider.fixture(for: .codex)
+    }
+}
+
+private struct PlanProvider: UsageProvider {
+    let providerID: ProviderID
+    let planName: String
+
+    func fetchUsage() async throws -> UsageSnapshot {
+        UsageSnapshot(provider: providerID, planName: planName)
     }
 }
