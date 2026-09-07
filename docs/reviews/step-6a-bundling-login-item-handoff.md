@@ -15,9 +15,11 @@
 
 The data-driven show/hide of providers already works — nothing there changes.
 
-## Decision needed from the maintainer
+## Naming (decided)
 
-**Bundle identifier.** Recommended: `com.platform41.takat` (matches the GitHub org). Alternatives: `studio.41labs.takat`, `my.41.takat`. One line — pick one, DeepSeek uses it everywhere. Spec assumes `com.platform41.takat` as a placeholder.
+- **Bundle identifier:** `net.41labs.takat.llm` — matches KiraSaku's Apple-platform convention (`net.41labs.kirasaku`); the `.llm` leaf reserves `net.41labs.takat` as a product-family namespace for future measuring apps.
+- **Display name** (`CFBundleName` / menu-bar / window title / everyday use): **`Takat`** — unchanged. "Takat LLM" is not a display name; the "what it measures" lives in positioning copy (*"Takat — usage for AI development tools"*), not the name. Revisit only if a second Takat app ships.
+- **Apple `DEVELOPMENT_TEAM`** (for step 6 signing, not this step): `R798HXVTJ5` (same as KiraSaku).
 
 ## Build
 
@@ -34,7 +36,7 @@ Create `VERSION` at repo root containing `0.1.0` (pre-production per the 41 OS v
 <dict>
     <key>CFBundleName</key>            <string>Takat</string>
     <key>CFBundleDisplayName</key>     <string>Takat</string>
-    <key>CFBundleIdentifier</key>      <string>com.platform41.takat</string>
+    <key>CFBundleIdentifier</key>      <string>net.41labs.takat.llm</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
     <key>CFBundleExecutable</key>      <string>Takat</string>
     <key>CFBundleShortVersionString</key> <string>__VERSION__</string>
