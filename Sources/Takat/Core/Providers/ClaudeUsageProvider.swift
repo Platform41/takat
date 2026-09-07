@@ -63,19 +63,25 @@ public struct ClaudeUsageProvider: UsageProvider {
             calendar: calendar
         )
 
+        let planName: String
+        let usage: ClaudeUsage?
+        if let configData = readConfig() {
+            let parsed = ClaudePlanReader.read(configData)
+            planName = parsed.planName
+            usage = parsed.usage
+        } else {
+            planName = "Claude"
+            usage = nil
+        }
+
         return UsageSnapshot(
             provider: .claude,
-            planName: planName(),
-            sessionPercent: nil,
-            weeklyPercent: nil,
-            resetDate: nil,
+            planName: planName,
+            sessionPercent: usage?.sessionPercent,
+            weeklyPercent: usage?.weeklyPercent,
+            resetDate: usage?.resetDate,
             dailyTokenUsage: daily
         )
-    }
-
-    private func planName() -> String {
-        guard let data = readConfig() else { return "Claude" }
-        return ClaudePlanReader.planName(fromConfig: data)
     }
 
     private func readConfig() -> Data? {
