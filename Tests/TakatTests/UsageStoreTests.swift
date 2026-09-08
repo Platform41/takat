@@ -44,6 +44,21 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(store.errors[.codex], .unauthorized)
     }
 
+    func testNotConfiguredProviderRemovesExistingSnapshot() async {
+        let provider = SwitchableProvider(providerID: .deepseek)
+        provider.shouldThrowNotConfigured = false
+        let store = UsageStore(providers: [provider], cacheDirectory: nil)
+
+        await store.refresh()
+        XCTAssertNotNil(store.snapshot(for: .deepseek))
+        XCTAssertNotNil(store.lastUpdated(for: .deepseek))
+
+        provider.shouldThrowNotConfigured = true
+        await store.refresh()
+        XCTAssertNil(store.snapshot(for: .deepseek))
+        XCTAssertNil(store.lastUpdated(for: .deepseek))
+    }
+
     func testRefreshFansOutConcurrently() async {
         let providers: [any UsageProvider] = [
             DelayedProvider(providerID: .claude, delayNanoseconds: 200_000_000),
@@ -131,5 +146,21 @@ private final class BlockingCountingProvider: UsageProvider, @unchecked Sendable
         for continuation in pending {
             continuation.resume()
         }
+    }
+}
+
+private final class SwitchableProvider: UsageProvider, @unchecked Sendable {
+    let providerID: ProviderID
+    var shouldThrowNotConfigured = false
+
+    init(providerID: ProviderID) {
+        self.providerID = providerID
+    }
+
+    func fetchUsage() async throws -> UsageSnapshot {
+        if shouldThrowNotConfigured {
+            throw UsageProviderError.notConfigured
+        }
+        return FixtureUsageProvider.fixture(for: providerID)
     }
 }

@@ -122,12 +122,12 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func statusText(for providerID: ProviderID) -> some View {
-        if store.errors[providerID] != nil {
-            Text("Unavailable")
-                .foregroundStyle(.orange)
-        } else if store.snapshot(for: providerID) != nil {
+        if store.snapshot(for: providerID) != nil {
             Text("Connected")
                 .foregroundStyle(.green)
+        } else if let error = store.errors[providerID], error != .notConfigured {
+            Text("Unavailable")
+                .foregroundStyle(.orange)
         } else {
             Text("Not configured")
                 .foregroundStyle(.secondary)
