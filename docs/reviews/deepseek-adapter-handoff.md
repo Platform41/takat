@@ -83,10 +83,12 @@ public actor DeepSeekUsageProvider: UsageProvider {
    - `401` / `403` → `throw .unauthorized`
    - non-2xx, transport error, timeout → `throw .unavailable`
    - 2xx: decode `{ is_available: Bool, balance_infos: [{ currency, total_balance, granted_balance, topped_up_balance }] }` (balances are **JSON strings** — parse with `Decimal(string:)`, default `0`). Pick the `"USD"` entry; if none, the first entry; if `balance_infos` empty → `.unavailable`.
-   - Build `UsageSnapshot(provider: .deepseek, planName: "DeepSeek", balance: Balance(amount: usd.total_balance, currency: usd.currency, isAvailable: response.is_available))`.
+   - Build `UsageSnapshot(provider: .deepseek, planName: "API", balance: Balance(amount: usd.total_balance, currency: usd.currency, isAvailable: response.is_available))`. **`planName: "API"`**, not "DeepSeek" — the pill would otherwise repeat the card header.
 5. Store in `cached`, return.
 
 Decode target models **only** those fields — nothing else from the response body.
+
+**`Decimal` + `Codable` caveat:** `Balance.amount` is persisted in `UsageCache.Payload`. `JSONDecoder` decoding `Decimal` from a JSON number can drift precision (`12.34` → `12.34000…5`). It's invisible here — the value only ever comes from a decimal-string parse, is only displayed rounded by `.formatted(.currency)`, and is never used in arithmetic — so **plain `Decimal` Codable is acceptable**. If you want it exact, give `Balance` a custom `Codable` that encodes `amount` as a `String`.
 
 **Error enum:** `.notConfigured` / `.unauthorized` / `.unavailable` all already exist. No new case.
 
@@ -104,25 +106,37 @@ Then the compiler will flag every exhaustive switch — update all:
 
 - **`ProviderStyle.swift`** — `displayName` → `"DeepSeek"`; `accentColor` → `.indigo` (`.blue` is Gemini's).
 - **`ProviderMark.swift`** — add a `case .deepseek` mark. DeepSeek's brand is a blue whale; simplified, draw a **rounded downward chevron / droplet** or a simple whale-tail silhouette (two curves meeting at a notch). Path-drawn, single colour, same treatment as the others. Fallback: `drop.fill` SF Symbol if the path won't come out clean — note it.
-- **`FixtureUsageProvider.swift`** — add `case .deepseek`: `planName = "DeepSeek"`, percents/reset `nil`, `tokenPattern` unused (empty daily), and set a fixture `balance` (e.g. `Balance(amount: 4.20, currency: "USD", isAvailable: true)`). `FixtureUsageProvider.fixture` will need to thread a `balance` through — extend its internal switch.
+- **`FixtureUsageProvider.swift`** — add `case .deepseek`: `planName = "API"`, percents/reset `nil`, `tokenPattern` unused (empty daily), and set a fixture `balance` (e.g. `Balance(amount: 4.20, currency: "USD", isAvailable: true)`). `FixtureUsageProvider.fixture` will need to thread a `balance` through — extend its internal switch.
+- **`ProviderMark.swift`** must read at **12 pt** in the switcher (the Gemini mark needed a rework for exactly this) — verify at size 12, not just 24.
 
 ---
 
 ## Part 5 — `ProviderCardView` balance layout (Two)
 
-`DashboardView.swift` — when `snapshot.balance != nil`, the card body is a **balance treatment** instead of the percent bars / caption:
+`ProviderCardView` in `DashboardView.swift` currently has a **2-way** body branch: `sessionPercent == nil && weeklyPercent == nil` → the "limits aren't reported" caption, else → the two `UsageBar`s. DeepSeek has both percents `nil`, so **without a change it would show "Session and weekly limits aren't reported by DeepSeek"** — wrong.
 
-```
-DeepSeek                                    API
-Updated 3m ago
-$4.20 remaining
-Balance OK                    ← or "Low — top up" (orange) when !isAvailable
+Make it **3-way, balance checked first**:
+
+```swift
+if let balance = snapshot.balance {
+    // balance treatment (below)
+} else if snapshot.sessionPercent == nil && snapshot.weeklyPercent == nil {
+    Text("Session and weekly limits aren't reported by \(snapshot.provider.displayName).")  // unchanged
+} else {
+    UsageBar(title: "Session", …); UsageBar(title: "Weekly", …)                             // unchanged
+}
 ```
 
-- Amount: `snapshot.balance.amount` formatted as currency (`.formatted(.currency(code: balance.currency))`), prominent (`.title3.weight(.semibold)`).
-- Status: `balance.isAvailable ? "Balance OK" (secondary) : "Low — top up" (orange)`.
-- **No chart** — `dailyTokenUsage` is empty for DeepSeek; the existing `DailyUsageChart` already shows the all-zero caption, but for DeepSeek skip the chart section entirely (`if !snapshot.dailyTokenUsage.isEmpty`).
-- Plan pill: show `"API"` (or omit — Two's call).
+Balance treatment:
+```
+DeepSeek                                    API      ← header (mark + name) + planName pill "API"
+Updated 3m ago                                        ← existing freshnessRow
+$4.20 remaining                                       ← balance.amount.formatted(.currency(code: balance.currency)), .title3.weight(.semibold)
+Balance OK                                            ← balance.isAvailable ? "Balance OK" .secondary : "Low — top up" .orange
+```
+
+- **The `DailyUsageChart(...)` at the bottom of the card body is currently unconditional** — wrap it: `if !snapshot.dailyTokenUsage.isEmpty { DailyUsageChart(…) }`. Otherwise DeepSeek shows a spurious "No usage in the last 7 days".
+- The `if let resetDate` line is already conditional — nil for DeepSeek, no change.
 - Keep it minimal and semantic; Two refines the visual later. The spend sparkline is a **separate follow-up** (needs the persistence layer to keep a balance history).
 
 ---
@@ -140,9 +154,13 @@ Balance OK                    ← or "Low — top up" (orange) when !isAvailable
   - key present, `store.errors[.deepseek] == .unauthorized` → "Invalid key" (orange)
   - key present, `.unavailable` → "Can't reach DeepSeek"
 - Footer: "Your key is stored in the macOS Keychain and used only to read your balance from api.deepseek.com."
-- A "key exists" check: `KeychainStore.get("deepseek") != nil` (reading it here is fine — it's the app's own item, silent).
+- A "key exists" check: `KeychainStore.get("deepseek") != nil` (reading the app's own item is silent on the **signed** build; on an ad-hoc `swift run` / `build-app.sh` dev build the signing identity changes per build so macOS may show a one-time keychain prompt — expected, dev-only).
 
 Also wire `DeepSeekUsageProvider()` into `TakatApp.swift`'s provider array.
+
+### Optional (same file, cheap) — version in the footer
+
+Add a line to the `SettingsView` footer: `Takat \(CFBundleShortVersionString) (build \(CFBundleVersion))` from `Bundle.main.infoDictionary`. Would have caught last session's "you're running a stale build 34" confusion in five seconds.
 
 ---
 
@@ -191,5 +209,6 @@ No change needed. `keychain-access-groups` is **not** required for an app's own 
 ## Handoff back
 
 - Push, open the PR, fill test-evidence.
-- Real run: enter a DeepSeek API key in Settings, confirm the card shows your real balance + status, remove the key and confirm the card disappears. **Screenshot** the DeepSeek card and the Settings section.
+- **Maintainer needs a DeepSeek API key ready** — platform.deepseek.com → API Keys. (An account with a real balance makes the screenshot meaningful; a $0 account still exercises the "Low — top up" path.)
+- Real run: enter the key in Settings, confirm the card shows the real balance + status, remove the key and confirm the card + switcher segment disappear. **Screenshot** the DeepSeek card and the Settings section.
 - One re-reviews from remote; Two reviews the card layout.
