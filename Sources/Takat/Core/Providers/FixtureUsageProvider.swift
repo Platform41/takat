@@ -21,6 +21,7 @@ public struct FixtureUsageProvider: UsageProvider {
         let sessionPercent: Double?
         let weeklyPercent: Double?
         let resetDate: Date?
+        let balance: Balance?
 
         switch providerID {
         case .claude:
@@ -33,6 +34,7 @@ public struct FixtureUsageProvider: UsageProvider {
                 matching: DateComponents(weekday: 2),
                 matchingPolicy: .nextTime
             )
+            balance = nil
         case .codex:
             tokenPattern = [800, 1200, 450, 1800, 990, 1500, 700]
             planName = "Enterprise"
@@ -43,15 +45,24 @@ public struct FixtureUsageProvider: UsageProvider {
                 matching: DateComponents(day: 1),
                 matchingPolicy: .nextTime
             )
+            balance = nil
         case .gemini:
             tokenPattern = [900, 600, 1200, 400, 1800, 200, 700]
             planName = "Gemini"
             sessionPercent = nil
             weeklyPercent = nil
             resetDate = nil
+            balance = nil
+        case .deepseek:
+            tokenPattern = []
+            planName = "API"
+            sessionPercent = nil
+            weeklyPercent = nil
+            resetDate = nil
+            balance = Balance(amount: 4.20, currency: "USD", isAvailable: true)
         }
 
-        let daily: [DailyTokenUsage] = (0..<7).reversed().map { offset in
+        let daily: [DailyTokenUsage] = tokenPattern.isEmpty ? [] : (0..<7).reversed().map { offset in
             let day = calendar.date(byAdding: .day, value: -offset, to: startOfToday) ?? startOfToday
             let index = (tokenPattern.count - 1 - offset) % tokenPattern.count
             return DailyTokenUsage(day: day, tokenCount: tokenPattern[index])
@@ -63,7 +74,8 @@ public struct FixtureUsageProvider: UsageProvider {
             sessionPercent: sessionPercent,
             weeklyPercent: weeklyPercent,
             resetDate: resetDate,
-            dailyTokenUsage: daily
+            dailyTokenUsage: daily,
+            balance: balance
         )
     }
 }

@@ -213,7 +213,15 @@ private struct ProviderCardView: View {
 
             freshnessRow
 
-            if snapshot.sessionPercent == nil && snapshot.weeklyPercent == nil {
+            if let balance = snapshot.balance {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(balance.amount.formatted(.currency(code: balance.currency))) remaining")
+                        .font(.title3.weight(.semibold))
+                    Text(balance.isAvailable ? "Balance OK" : "Low — top up")
+                        .font(.caption)
+                        .foregroundStyle(balance.isAvailable ? Color.secondary : Color.orange)
+                }
+            } else if snapshot.sessionPercent == nil && snapshot.weeklyPercent == nil {
                 Text("Session and weekly limits aren't reported by \(snapshot.provider.displayName).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -230,7 +238,9 @@ private struct ProviderCardView: View {
                     .foregroundStyle(.secondary)
             }
 
-            DailyUsageChart(usage: snapshot.dailyTokenUsage, color: snapshot.provider.accentColor)
+            if !snapshot.dailyTokenUsage.isEmpty {
+                DailyUsageChart(usage: snapshot.dailyTokenUsage, color: snapshot.provider.accentColor)
+            }
         }
         .padding(12)
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))

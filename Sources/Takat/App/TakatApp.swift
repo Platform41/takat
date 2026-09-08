@@ -8,7 +8,8 @@ struct TakatApp: App {
         let providers: [any UsageProvider] = [
             ClaudeUsageProvider(),
             CodexUsageProvider(),
-            GeminiUsageProvider()
+            GeminiUsageProvider(),
+            DeepSeekUsageProvider()
         ]
         _store = State(initialValue: UsageStore(providers: providers))
     }
