@@ -5,7 +5,8 @@ keychain profile (see Part A of `docs/reviews/step-6-signing-distribution-handof
 
 ## One-time setup
 
-1. **Developer ID cert** — create `Developer ID Application: 41 LABS SDN. BHD. (R798HXVTJ5)`.
+1. **Developer ID cert** — create a `Developer ID Application` certificate for the
+   publishing Apple Developer team.
    Verify:
 
    ```bash
@@ -26,7 +27,7 @@ keychain profile (see Part A of `docs/reviews/step-6-signing-distribution-handof
 ## Release
 
 ```bash
-TAKAT_SIGN_ID="Developer ID Application: 41 LABS SDN. BHD. (R798HXVTJ5)" \
+TAKAT_SIGN_ID="Developer ID Application: <TEAM NAME> (<TEAM ID>)" \
   ./scripts/release-app.sh
 ```
 

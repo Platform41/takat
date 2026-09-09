@@ -1,4 +1,4 @@
 # Copy to .signing.local and fill in your values.
 # .signing.local is gitignored — never commit real credentials.
-# export TAKAT_SIGN_ID="Developer ID Application: 41 LABS SDN. BHD. (R798HXVTJ5)"
+# export TAKAT_SIGN_ID="Developer ID Application: <TEAM NAME> (<TEAM ID>)"
 # export TAKAT_NOTARY_PROFILE="takat-notary"
