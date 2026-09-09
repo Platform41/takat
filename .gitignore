@@ -10,3 +10,6 @@ dist/
 *.p12
 
 .DS_Store
+
+# Stray RAG/memory session DBs written into the working tree by other tools
+rag/

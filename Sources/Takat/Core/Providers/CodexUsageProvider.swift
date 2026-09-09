@@ -4,9 +4,14 @@ public struct CodexUsageProvider: UsageProvider {
     public let providerID: ProviderID = .codex
 
     private let sessionsDirectory: URL
+    private let clock: @Sendable () -> Date
 
-    public init(sessionsDirectory: URL = CodexUsageProvider.defaultSessionsDirectory) {
+    public init(
+        sessionsDirectory: URL = CodexUsageProvider.defaultSessionsDirectory,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.sessionsDirectory = sessionsDirectory
+        self.clock = now
     }
 
     public static var defaultSessionsDirectory: URL {
@@ -33,7 +38,7 @@ public struct CodexUsageProvider: UsageProvider {
         }
 
         let calendar = Calendar.current
-        let now = Date()
+        let now = clock()
         let cutoff = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now)) ?? now
 
         var deltas: [(Date, Int)] = []
@@ -51,11 +56,30 @@ public struct CodexUsageProvider: UsageProvider {
         return UsageSnapshot(
             provider: .codex,
             planName: CodexSessionParser.planName(from: rateLimits.plan_type),
-            sessionPercent: rateLimits.primary?.used_percent,
-            weeklyPercent: rateLimits.secondary?.used_percent,
-            resetDate: rateLimits.secondary?.resets_at.map { Date(timeIntervalSince1970: $0) },
+            sessionPercent: livePercent(rateLimits.primary, at: now),
+            weeklyPercent: livePercent(rateLimits.secondary, at: now),
+            resetDate: liveReset(rateLimits.secondary, at: now),
             dailyTokenUsage: daily
         )
+    }
+
+    /// `used_percent` is only meaningful while its window is still open. A cached
+    /// `rate_limits` block from an older session can name a window that has since
+    /// reset — in that case the percentage is stale and we report `nil` (unknown),
+    /// not `0` (a real fresh-window value the guard still passes through).
+    private func livePercent(_ window: CodexWindow?, at now: Date) -> Double? {
+        guard let window, isOpen(window, at: now) else { return nil }
+        return window.used_percent
+    }
+
+    private func liveReset(_ window: CodexWindow?, at now: Date) -> Date? {
+        guard let window, let resetsAt = window.resets_at, isOpen(window, at: now) else { return nil }
+        return Date(timeIntervalSince1970: resetsAt)
+    }
+
+    private func isOpen(_ window: CodexWindow, at now: Date) -> Bool {
+        guard let resetsAt = window.resets_at else { return false }
+        return Date(timeIntervalSince1970: resetsAt) > now
     }
 
     private func latestRateLimits(in files: [URL]) -> CodexRateLimits? {

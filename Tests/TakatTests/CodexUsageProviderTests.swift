@@ -128,9 +128,11 @@ final class CodexUsageProviderTests: XCTestCase {
         reasoning: Int = 0,
         sessionPercent: Double,
         weeklyPercent: Double,
-        planType: String
+        planType: String,
+        primaryResetsAt: Double = Date().timeIntervalSince1970 + 7_200,     // +2h — window open
+        secondaryResetsAt: Double = Date().timeIntervalSince1970 + 432_000  // +5d — window open
     ) -> String {
-        #"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":\#(input),"cached_input_tokens":\#(cached),"cache_write_input_tokens":\#(cacheWrite),"output_tokens":\#(output),"reasoning_output_tokens":\#(reasoning)}},"rate_limits":{"primary":{"used_percent":\#(sessionPercent),"window_minutes":300,"resets_at":1788690513},"secondary":{"used_percent":\#(weeklyPercent),"window_minutes":10080,"resets_at":1788748053},"plan_type":"\#(planType)","limit_id":"codex"}}}"#
+        #"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":\#(input),"cached_input_tokens":\#(cached),"cache_write_input_tokens":\#(cacheWrite),"output_tokens":\#(output),"reasoning_output_tokens":\#(reasoning)}},"rate_limits":{"primary":{"used_percent":\#(sessionPercent),"window_minutes":300,"resets_at":\#(primaryResetsAt)},"secondary":{"used_percent":\#(weeklyPercent),"window_minutes":10080,"resets_at":\#(secondaryResetsAt)},"plan_type":"\#(planType)","limit_id":"codex"}}}"#
     }
 
     private func sessionMetaLine(timestamp: String) -> String {
@@ -138,7 +140,11 @@ final class CodexUsageProviderTests: XCTestCase {
     }
 
     func testPicksNewestFileAcrossNestedDirs() async throws {
-        let provider = CodexUsageProvider(sessionsDirectory: codexFixturesDir())
+        // `now` fixed before the committed fixtures' `resets_at`, so both windows are open.
+        let provider = CodexUsageProvider(
+            sessionsDirectory: codexFixturesDir(),
+            now: { Date(timeIntervalSince1970: 1788600000) }
+        )
         let snapshot = try await provider.fetchUsage()
 
         // Newest fixture (2026/09/06) carries plan_type "pro".
@@ -147,6 +153,87 @@ final class CodexUsageProviderTests: XCTestCase {
         XCTAssertEqual(snapshot.sessionPercent, 15.0)
         XCTAssertEqual(snapshot.weeklyPercent, 88.5)
         XCTAssertNotNil(snapshot.resetDate)
+    }
+
+    func testStaleSessionWindowReportsNilSession() async throws {
+        let dir = makeSessionDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        writeSessionFile(
+            "rollout-x.jsonl",
+            lines: [
+                sessionMetaLine(timestamp: "2026-09-06T10:00:00.000Z"),
+                tokenCountLine(
+                    timestamp: "2026-09-06T10:05:00.000Z",
+                    input: 100,
+                    sessionPercent: 90,
+                    weeklyPercent: 14,
+                    planType: "plus",
+                    primaryResetsAt: Date().timeIntervalSince1970 - 3_600,
+                    secondaryResetsAt: Date().timeIntervalSince1970 + 432_000
+                )
+            ],
+            in: dir
+        )
+
+        let snapshot = try await CodexUsageProvider(sessionsDirectory: dir).fetchUsage()
+
+        XCTAssertNil(snapshot.sessionPercent)
+        XCTAssertEqual(snapshot.weeklyPercent, 14)
+        XCTAssertNotNil(snapshot.resetDate)
+    }
+
+    func testStaleWeeklyWindowNilsPercentAndReset() async throws {
+        let dir = makeSessionDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        writeSessionFile(
+            "rollout-x.jsonl",
+            lines: [
+                sessionMetaLine(timestamp: "2026-09-06T10:00:00.000Z"),
+                tokenCountLine(
+                    timestamp: "2026-09-06T10:05:00.000Z",
+                    input: 100,
+                    sessionPercent: 5,
+                    weeklyPercent: 60,
+                    planType: "plus",
+                    primaryResetsAt: Date().timeIntervalSince1970 + 7_200,
+                    secondaryResetsAt: Date().timeIntervalSince1970 - 3_600
+                )
+            ],
+            in: dir
+        )
+
+        let snapshot = try await CodexUsageProvider(sessionsDirectory: dir).fetchUsage()
+
+        XCTAssertEqual(snapshot.sessionPercent, 5)
+        XCTAssertNil(snapshot.weeklyPercent)
+        XCTAssertNil(snapshot.resetDate)
+    }
+
+    func testFreshWindowZeroPercentPassesThrough() async throws {
+        let dir = makeSessionDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        writeSessionFile(
+            "rollout-x.jsonl",
+            lines: [
+                sessionMetaLine(timestamp: "2026-09-06T10:00:00.000Z"),
+                tokenCountLine(
+                    timestamp: "2026-09-06T10:05:00.000Z",
+                    input: 100,
+                    sessionPercent: 0,
+                    weeklyPercent: 0,
+                    planType: "plus"
+                )
+            ],
+            in: dir
+        )
+
+        let snapshot = try await CodexUsageProvider(sessionsDirectory: dir).fetchUsage()
+
+        XCTAssertEqual(snapshot.sessionPercent, 0)
+        XCTAssertEqual(snapshot.weeklyPercent, 0)
     }
 
     func testFallsBackToSecondFile() async throws {
