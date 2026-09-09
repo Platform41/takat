@@ -64,10 +64,15 @@ public struct GeminiUsageProvider: UsageProvider {
             throw UsageProviderError.unavailable
         }
 
+        // A legacy file can be recently touched (mtime in window) while carrying
+        // only old messages — filter by each message's own timestamp so it
+        // doesn't count as "real recent usage".
+        let recentDeltas = deltas.filter { $0.0 >= cutoff }
+
         // Legacy CLI has real recent usage — the normal token-chart snapshot.
-        if !deltas.isEmpty {
+        if !recentDeltas.isEmpty {
             let daily = DailyUsageBucketing.dailyUsage(
-                tokenDeltas: deltas,
+                tokenDeltas: recentDeltas,
                 referenceDate: now,
                 calendar: calendar
             )

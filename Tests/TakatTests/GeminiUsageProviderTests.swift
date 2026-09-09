@@ -271,6 +271,37 @@ final class GeminiUsageProviderTests: XCTestCase {
         XCTAssertTrue(snapshot.dailyTokenUsage.isEmpty)
     }
 
+    func testRecentlyTouchedLegacyFileWithOldMessagesDoesNotSuppressNotice() async throws {
+        // File mtime is "now" (just written) but every message is 30 days old.
+        // Filtering deltas by message timestamp must still yield the notice.
+        let root = makeChatsRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let agy = makeActiveAntigravityRoot()
+        defer { try? FileManager.default.removeItem(at: agy) }
+
+        let old = iso.string(from: Date().addingTimeInterval(-30 * 24 * 3600))
+        writeChatFile("dir/chats/touched.json", content: geminiFile(messages: [geminiMessage(timestamp: old, input: 5000, output: 999)]), in: root)
+
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: agy).fetchUsage()
+
+        XCTAssertEqual(snapshot.note, GeminiUsageProvider.antigravityNote)
+        XCTAssertTrue(snapshot.dailyTokenUsage.isEmpty)
+    }
+
+    func testRecentlyTouchedLegacyFileWithOldMessagesShowsZeroChartWhenNoAntigravity() async throws {
+        let root = makeChatsRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let old = iso.string(from: Date().addingTimeInterval(-30 * 24 * 3600))
+        writeChatFile("dir/chats/touched.json", content: geminiFile(messages: [geminiMessage(timestamp: old, input: 5000)]), in: root)
+
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot()).fetchUsage()
+
+        XCTAssertNil(snapshot.note)
+        XCTAssertEqual(snapshot.dailyTokenUsage.count, 7)
+        XCTAssertTrue(snapshot.dailyTokenUsage.allSatisfy { $0.tokenCount == 0 })
+    }
+
     func testLegacyDataTakesPrecedenceOverAntigravity() async throws {
         let root = makeChatsRoot()
         defer { try? FileManager.default.removeItem(at: root) }
