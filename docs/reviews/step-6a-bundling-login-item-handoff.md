@@ -19,7 +19,7 @@ The data-driven show/hide of providers already works — nothing there changes.
 
 - **Bundle identifier:** `net.41labs.takat.llm` — matches KiraSaku's Apple-platform convention (`net.41labs.kirasaku`); the `.llm` leaf reserves `net.41labs.takat` as a product-family namespace for future measuring apps.
 - **Display name** (`CFBundleName` / menu-bar / window title / everyday use): **`Takat`** — unchanged. "Takat LLM" is not a display name; the "what it measures" lives in positioning copy (*"Takat — usage for AI development tools"*), not the name. Revisit only if a second Takat app ships.
-- **Apple `DEVELOPMENT_TEAM`** (for step 6 signing, not this step): `R798HXVTJ5` (same as KiraSaku).
+- **Apple `DEVELOPMENT_TEAM`** (for step 6 signing, not this step): `<TEAM ID>`.
 
 ## Build
 

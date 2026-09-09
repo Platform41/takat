@@ -10,19 +10,19 @@
 
 ## Part A — Maintainer prerequisites (blocking; nothing signs without these)
 
-The keychain currently has `Apple Development: …` and `Apple Distribution: 41 LABS SDN. BHD. (R798HXVTJ5)` — the latter is **App Store** distribution, **not** what a notarized outside-the-store app needs.
+The keychain currently has `Apple Development: …` and `Apple Distribution: <TEAM NAME> (<TEAM ID>)` — the latter is **App Store** distribution, **not** what a notarized outside-the-store app needs.
 
-1. **Create a "Developer ID Application" certificate** for team `R798HXVTJ5`:
-   - Xcode → Settings → Accounts → 41 LABS SDN. BHD. → Manage Certificates → **+** → **Developer ID Application**
+1. **Create a "Developer ID Application" certificate** for team `<TEAM ID>`:
+   - Xcode → Settings → Accounts → `<TEAM NAME>` → Manage Certificates → **+** → **Developer ID Application**
    - (or developer.apple.com → Certificates → + → Developer ID Application; Account Holder/Admin only; max 5)
-   - Confirm: `security find-identity -v -p codesigning` shows `Developer ID Application: 41 LABS SDN. BHD. (R798HXVTJ5)`.
+   - Confirm: `security find-identity -v -p codesigning` shows `Developer ID Application: <TEAM NAME> (<TEAM ID>)`.
 
 2. **Notarization credentials** — pick one, store locally:
    - **Recommended: App Store Connect API key** (`.p8`, doesn't expire). appstoreconnect.apple.com → Users and Access → Integrations → App Store Connect API → generate a key with the **Developer** role. Save `AuthKey_XXXX.p8` somewhere outside the repo; note the **Key ID** and **Issuer ID**.
    - Then: `xcrun notarytool store-credentials "takat-notary" --key <path.p8> --key-id <KEYID> --issuer <ISSUER-UUID>` — stores it in the keychain under the profile name `takat-notary`.
-   - (Alternative: an app-specific password from appleid.apple.com + `store-credentials "takat-notary" --apple-id … --team-id R798HXVTJ5 --password …`.)
+   - (Alternative: an app-specific password from appleid.apple.com + `store-credentials "takat-notary" --apple-id … --team-id <TEAM-ID> --password …`.)
 
-3. Tell DeepSeek the **exact identity string** (`Developer ID Application: 41 LABS SDN. BHD. (R798HXVTJ5)`) and the **notary profile name** (`takat-notary`). Nothing secret is committed — see Part H.
+3. Tell DeepSeek the **exact identity string** (`Developer ID Application: <TEAM NAME> (<TEAM ID>)`) and the **notary profile name** (`takat-notary`). Nothing secret is committed — see Part H.
 
 ---
 
@@ -68,7 +68,7 @@ Minimal — Takat is **not sandboxed** (it reads `~/.codex`, `~/.claude`, `~/.ge
 Read the identity from an env var so the script still runs unsigned on a machine without the cert:
 
 ```sh
-SIGN_ID="${TAKAT_SIGN_ID:-}"          # e.g. "Developer ID Application: 41 LABS SDN. BHD. (R798HXVTJ5)"
+SIGN_ID="${TAKAT_SIGN_ID:-}"          # e.g. "Developer ID Application: <TEAM NAME> (<TEAM ID>)"
 if [ -n "$SIGN_ID" ]; then
     codesign --force --options runtime --timestamp \
         --entitlements App/Takat.entitlements \
@@ -175,5 +175,5 @@ Not a full audit — a once-over while the panel is being touched for Part B:
 ## Handoff back
 
 - DeepSeek: Parts B, C, F, G, H (code, scripts, entitlements, placeholder icon, docs). Open the PR; `swift test` 79/79; `build-app.sh` ad-hoc path still green.
-- Maintainer: Part A, then run `TAKAT_SIGN_ID="Developer ID Application: 41 LABS SDN. BHD. (R798HXVTJ5)" ./scripts/release-app.sh` and paste the `notarytool` result + `spctl -a -vvv` output into the PR.
+- Maintainer: Part A, then run `TAKAT_SIGN_ID="Developer ID Application: <TEAM NAME> (<TEAM ID>)" ./scripts/release-app.sh` and paste the `notarytool` result + `spctl -a -vvv` output into the PR.
 - One re-reviews from remote once both halves are in.
