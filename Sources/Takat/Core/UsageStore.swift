@@ -90,6 +90,10 @@ public final class UsageStore {
                 lastUpdated[id] = now
             case .failure(let error):
                 errors[id] = error
+                if error == .notConfigured {
+                    snapshots.removeValue(forKey: id)
+                    lastUpdated.removeValue(forKey: id)
+                }
             }
         }
 

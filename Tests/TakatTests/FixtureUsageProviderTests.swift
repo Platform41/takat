@@ -33,6 +33,18 @@ final class FixtureUsageProviderTests: XCTestCase {
         XCTAssertNotNil(snapshot.resetDate)
     }
 
+    func testDeepSeekFixtureIsStable() {
+        let snapshot = FixtureUsageProvider.fixture(for: .deepseek, now: fixedDate)
+
+        XCTAssertEqual(snapshot.provider, .deepseek)
+        XCTAssertEqual(snapshot.planName, "API")
+        XCTAssertNil(snapshot.sessionPercent)
+        XCTAssertNil(snapshot.weeklyPercent)
+        XCTAssertNil(snapshot.resetDate)
+        XCTAssertEqual(snapshot.dailyTokenUsage.count, 0)
+        XCTAssertEqual(snapshot.balance, Balance(amount: 4.20, currency: "USD", isAvailable: true))
+    }
+
     func testDailyUsageIsOrderedChronologically() {
         let snapshot = FixtureUsageProvider.fixture(for: .claude, now: fixedDate)
         let days = snapshot.dailyTokenUsage.map(\.day)

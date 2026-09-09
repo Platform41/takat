@@ -7,6 +7,12 @@ final class ProviderSwitcherTests: XCTestCase {
         XCTAssertEqual(providers, [.claude, .gemini])
     }
 
+    func testSwitcherProvidersIncludesDeepSeekInDisplayOrder() {
+        let providers = ProviderSwitcher.switcherProviders(snapshots: [.deepseek, .claude])
+        XCTAssertEqual(providers, [.claude, .deepseek])
+        XCTAssertEqual(ProviderID.displayOrder, [.claude, .codex, .gemini, .deepseek])
+    }
+
     func testSwitcherProvidersIgnoresUnavailable() {
         XCTAssertEqual(ProviderSwitcher.switcherProviders(snapshots: [.codex]), [.codex])
         XCTAssertEqual(ProviderSwitcher.switcherProviders(snapshots: []), [])

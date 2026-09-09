@@ -6,6 +6,7 @@ extension ProviderID {
         case .claude: "Claude"
         case .codex: "Codex"
         case .gemini: "Gemini"
+        case .deepseek: "DeepSeek"
         }
     }
 
@@ -14,6 +15,7 @@ extension ProviderID {
         case .claude: .orange
         case .codex: .teal
         case .gemini: .blue
+        case .deepseek: .indigo
         }
     }
 }

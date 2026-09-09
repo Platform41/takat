@@ -3,6 +3,6 @@ import XCTest
 
 final class UsageSnapshotTests: XCTestCase {
     func testProviderIDsAreStable() {
-        XCTAssertEqual(ProviderID.allCases.map(\.rawValue), ["claude", "codex", "gemini"])
+        XCTAssertEqual(ProviderID.allCases.map(\.rawValue), ["claude", "codex", "gemini", "deepseek"])
     }
 }

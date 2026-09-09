@@ -24,6 +24,8 @@ struct ProviderMark: View {
                     lineJoin: .round
                 )
                 context.stroke(codexPath(in: rect), with: .foreground, style: stroke)
+            case .deepseek:
+                context.fill(deepseekPath(in: rect), with: .foreground)
             }
         }
         .frame(width: size, height: size)
@@ -88,6 +90,36 @@ struct ProviderMark: View {
         path.move(to: barStart)
         path.addLine(to: barEnd)
 
+        return path
+    }
+
+    private func deepseekPath(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        let x = rect.minX
+        let y = rect.minY
+
+        var path = Path()
+        path.move(to: CGPoint(x: x + w * 0.5, y: y + h * 0.90))
+        path.addCurve(
+            to: CGPoint(x: x + w * 0.05, y: y + h * 0.25),
+            control1: CGPoint(x: x + w * 0.42, y: y + h * 0.65),
+            control2: CGPoint(x: x + w * 0.18, y: y + h * 0.38)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: x + w * 0.5, y: y + h * 0.42),
+            control: CGPoint(x: x + w * 0.28, y: y + h * 0.30)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: x + w * 0.95, y: y + h * 0.25),
+            control: CGPoint(x: x + w * 0.72, y: y + h * 0.30)
+        )
+        path.addCurve(
+            to: CGPoint(x: x + w * 0.5, y: y + h * 0.90),
+            control1: CGPoint(x: x + w * 0.82, y: y + h * 0.38),
+            control2: CGPoint(x: x + w * 0.58, y: y + h * 0.65)
+        )
+        path.closeSubpath()
         return path
     }
 }
