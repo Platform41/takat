@@ -8,6 +8,9 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
     public let resetDate: Date?
     public let dailyTokenUsage: [DailyTokenUsage]
     public let balance: Balance?
+    /// The provider is present but its usage isn't locally measurable — this
+    /// explains why (e.g. Google Antigravity records no token counts on disk).
+    public let note: String?
 
     public init(
         provider: ProviderID,
@@ -16,7 +19,8 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
         weeklyPercent: Double? = nil,
         resetDate: Date? = nil,
         dailyTokenUsage: [DailyTokenUsage] = [],
-        balance: Balance? = nil
+        balance: Balance? = nil,
+        note: String? = nil
     ) {
         self.provider = provider
         self.planName = planName
@@ -25,6 +29,7 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
         self.resetDate = resetDate
         self.dailyTokenUsage = dailyTokenUsage
         self.balance = balance
+        self.note = note
     }
 }
 

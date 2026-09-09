@@ -110,6 +110,21 @@ final class GeminiUsageProviderTests: XCTestCase {
             .appendingPathComponent("TakatGeminiTests-\(UUID().uuidString)", isDirectory: true)
     }
 
+    /// A path that does not exist — so `antigravityActive` is false and tests
+    /// don't pick up the real `~/.gemini/antigravity-cli` on the dev machine.
+    private func inactiveAntigravityRoot() -> URL {
+        makeChatsRoot().appendingPathComponent("no-antigravity", isDirectory: true)
+    }
+
+    /// Creates `<root>/history.jsonl` with a recent mtime.
+    private func makeActiveAntigravityRoot() -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TakatAgyTests-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try? "{}\n".data(using: .utf8)!.write(to: root.appendingPathComponent("history.jsonl"))
+        return root
+    }
+
     private func writeChatFile(_ relativePath: String, content: String, in root: URL) {
         let url = root.appendingPathComponent(relativePath)
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -137,7 +152,7 @@ final class GeminiUsageProviderTests: XCTestCase {
         writeChatFile("dir-a/chats/session-1.json", content: geminiFile(messages: [geminiMessage(timestamp: iso.string(from: Date()), input: 100, output: 50)]), in: root)
         writeChatFile("dir-b/chats/session-2.json", content: geminiFile(messages: [geminiMessage(timestamp: iso.string(from: Date()), input: 30)]), in: root)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot()).fetchUsage()
 
         let total = snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }
         XCTAssertEqual(total, 180)
@@ -156,14 +171,14 @@ final class GeminiUsageProviderTests: XCTestCase {
         let oldURL = root.appendingPathComponent("dir/chats/old.json")
         try? FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-30 * 24 * 3600)], ofItemAtPath: oldURL.path)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot()).fetchUsage()
 
         XCTAssertEqual(snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }, 100)
     }
 
     func testMissingDirectoryThrowsNotConfigured() async {
         let root = makeChatsRoot().appendingPathComponent("does-not-exist", isDirectory: true)
-        let provider = GeminiUsageProvider(chatsRoot: root)
+        let provider = GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot())
 
         do {
             _ = try await provider.fetchUsage()
@@ -180,7 +195,7 @@ final class GeminiUsageProviderTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         try? FileManager.default.createDirectory(at: root.appendingPathComponent("dir"), withIntermediateDirectories: true)
 
-        let provider = GeminiUsageProvider(chatsRoot: root)
+        let provider = GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot())
 
         do {
             _ = try await provider.fetchUsage()
@@ -200,7 +215,7 @@ final class GeminiUsageProviderTests: XCTestCase {
         let url = root.appendingPathComponent("dir/chats/stale.json")
         try? FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-30 * 24 * 3600)], ofItemAtPath: url.path)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot()).fetchUsage()
 
         XCTAssertEqual(snapshot.planName, "Gemini")
         XCTAssertEqual(snapshot.dailyTokenUsage.count, 7)
@@ -215,7 +230,7 @@ final class GeminiUsageProviderTests: XCTestCase {
 
         writeChatFile("dir/chats/bad.json", content: "not json", in: root)
 
-        let provider = GeminiUsageProvider(chatsRoot: root)
+        let provider = GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot())
 
         do {
             _ = try await provider.fetchUsage()
@@ -225,5 +240,61 @@ final class GeminiUsageProviderTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+    }
+
+    func testAntigravityActiveWithNoLegacyReturnsNotice() async throws {
+        let chats = makeChatsRoot().appendingPathComponent("missing", isDirectory: true)
+        let agy = makeActiveAntigravityRoot()
+        defer { try? FileManager.default.removeItem(at: agy) }
+
+        let snapshot = try await GeminiUsageProvider(chatsRoot: chats, antigravityRoot: agy).fetchUsage()
+
+        XCTAssertEqual(snapshot.note, GeminiUsageProvider.antigravityNote)
+        XCTAssertEqual(snapshot.planName, "Gemini")
+        XCTAssertTrue(snapshot.dailyTokenUsage.isEmpty)
+        XCTAssertNil(snapshot.sessionPercent)
+    }
+
+    func testAntigravityActiveWithStaleLegacyReturnsNotice() async throws {
+        let root = makeChatsRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let agy = makeActiveAntigravityRoot()
+        defer { try? FileManager.default.removeItem(at: agy) }
+
+        writeChatFile("dir/chats/stale.json", content: geminiFile(messages: [geminiMessage(timestamp: iso.string(from: Date()), input: 500)]), in: root)
+        let url = root.appendingPathComponent("dir/chats/stale.json")
+        try? FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-30 * 24 * 3600)], ofItemAtPath: url.path)
+
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: agy).fetchUsage()
+
+        XCTAssertEqual(snapshot.note, GeminiUsageProvider.antigravityNote)
+        XCTAssertTrue(snapshot.dailyTokenUsage.isEmpty)
+    }
+
+    func testLegacyDataTakesPrecedenceOverAntigravity() async throws {
+        let root = makeChatsRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let agy = makeActiveAntigravityRoot()
+        defer { try? FileManager.default.removeItem(at: agy) }
+
+        writeChatFile("dir/chats/recent.json", content: geminiFile(messages: [geminiMessage(timestamp: iso.string(from: Date()), input: 100, output: 20)]), in: root)
+
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: agy).fetchUsage()
+
+        XCTAssertNil(snapshot.note)
+        XCTAssertEqual(snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }, 120)
+    }
+
+    func testAntigravityWithRecentConversationCountsAsActive() async throws {
+        let chats = makeChatsRoot().appendingPathComponent("missing", isDirectory: true)
+        let agy = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TakatAgyConv-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: agy) }
+        try? FileManager.default.createDirectory(at: agy.appendingPathComponent("conversations"), withIntermediateDirectories: true)
+        try? "x".data(using: .utf8)!.write(to: agy.appendingPathComponent("conversations/a.db"))
+
+        let snapshot = try await GeminiUsageProvider(chatsRoot: chats, antigravityRoot: agy).fetchUsage()
+
+        XCTAssertEqual(snapshot.note, GeminiUsageProvider.antigravityNote)
     }
 }

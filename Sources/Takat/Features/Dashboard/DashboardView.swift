@@ -213,7 +213,11 @@ private struct ProviderCardView: View {
 
             freshnessRow
 
-            if let balance = snapshot.balance {
+            if let note = snapshot.note {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let balance = snapshot.balance {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(balance.amount.formatted(.currency(code: balance.currency))) remaining")
                         .font(.title3.weight(.semibold))

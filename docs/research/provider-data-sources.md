@@ -181,7 +181,13 @@ Still valid: **plan name IS local** (`~/.claude.json` → `oauthAccount.organiza
 
 ## Gemini CLI — `~/.gemini/`
 
-### Where usage lives
+### Correction (2026-09-09) — Google Antigravity records no usage
+
+The maintainer moved from the legacy Gemini CLI to **Google Antigravity** (`~/.gemini/antigravity-cli/`). Verified against a live install: Antigravity's storage is a **conversation store only** — `brain/<id>/.system_generated/logs/transcript*.jsonl` (keys: `step_index / source / type / status / created_at / content`), `conversations/<id>.db` (protobuf blobs), `history.jsonl`, `conversation_summaries.db` — **none carry token counts** (`grep -iE 'tokenCount|usageMetadata|promptToken|totalToken'` → nothing). No quota/utilization cache either.
+
+So there is nothing to track. The Gemini adapter (shipped PR #13) keeps its legacy-CLI path, and when it detects Antigravity is the active tool — `~/.gemini/antigravity-cli/history.jsonl` or `conversations/` mtime within the last 7 days, with no legacy in-window token data — it returns a `UsageSnapshot` with `note: "Antigravity doesn't record token usage locally."` and an empty chart. The card shows that one line; Settings shows "Not measurable". (PR #38 handoff → `feat/gemini-antigravity-notice`.)
+
+### Where usage lives (legacy Gemini CLI)
 
 ```
 ~/.gemini/tmp/<project-hash>/chats/session-<ISO8601>.json
@@ -281,7 +287,7 @@ API key, stored in the **macOS Keychain**. Needs the signed-bundle entitlement w
 
 1. **Step 4 = Codex adapter.** ✅ shipped (PR #6/#8).
 2. **Step 5 = Claude adapter, Option A** (token chart, percentages `nil`). ✅ shipped (PR #11).
-3. **Step 5.5 = Gemini CLI adapter.** ✅ shipped (PR #13).
+3. **Step 5.5 = Gemini CLI adapter.** ✅ shipped (PR #13). Antigravity "not measurable" notice — `feat/gemini-antigravity-notice` (see the 2026-09-09 correction above).
 4. **Step 5.6 = Claude plan name** (`~/.claude.json` → `organizationType`). ✅ shipped (PR #17).
 5. **Step 5.8 (new) = Claude session/weekly/reset from `cachedUsageUtilization`** — local, no auth. Full parity with the Codex card. → `docs/reviews/step-5.8-claude-local-usage-handoff.md`.
 6. **"Network adapters" milestone (after step 6 signing)** = **DeepSeek balance only** (Claude Option B dropped — Correction 2). Needs Keychain + a settings UI + the `balance` model field. Optionally a Six ToS check for the DeepSeek API key handling.
