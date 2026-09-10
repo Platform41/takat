@@ -11,7 +11,7 @@ Takat is a native macOS menu-bar app that brings usage information from your AI 
 | Claude Code | Plan, current-session and weekly utilization, reset date, and seven-day token activity | Claude Code's local configuration cache and transcripts |
 | Codex CLI | Plan, current-session and weekly utilization, reset date, and seven-day token activity | Local Codex session logs |
 | Gemini CLI | Seven-day token activity | Local legacy Gemini CLI chats |
-| Google Antigravity | An explicit “not locally measurable” notice | Recent local Antigravity activity |
+| Google Antigravity | Weekly quota used and reset date for each model group (Gemini; Claude & GPT) | The installed `agy` CLI's local `/usage` command |
 | DeepSeek | Remaining API credit balance | DeepSeek's balance API |
 
 Takat 0.2.0 is a pre-release. Its four-provider dashboard uses real provider data; no fixture data is used by the app.
@@ -29,7 +29,8 @@ Published releases are Developer ID signed and notarized. Takat requires macOS T
 Takat is local-first:
 
 - Claude, Codex, and legacy Gemini usage is derived from files already written by their command-line tools.
-- Takat decodes only the metadata and token fields it needs. It does not decode, display, transmit, or cache prompt and response content.
+- Google Antigravity quota is read by running the installed `agy` executable's local `/usage` command. Takat does not read Antigravity's OAuth credentials and does not call Google's Code Assist service itself, but `agy` may refresh its quota over the network using its own existing authentication.
+- Takat decodes only the metadata and token fields it needs. It does not decode, display, transmit, or cache prompt and response content — this includes the human-readable text and descriptions in the `agy /usage` output.
 - Derived usage snapshots are cached in `~/Library/Application Support/Takat/usage-cache.json` so the dashboard can open immediately.
 - A DeepSeek API key is stored in the macOS Keychain and sent only to `api.deepseek.com` to request the account balance.
 - Takat has no telemetry or analytics.

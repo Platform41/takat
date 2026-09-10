@@ -123,7 +123,7 @@ struct SettingsView: View {
     @ViewBuilder
     private func statusText(for providerID: ProviderID) -> some View {
         if store.snapshot(for: providerID)?.note != nil {
-            Text("Not measurable")
+            Text("Usage unavailable")
                 .foregroundStyle(.secondary)
         } else if store.snapshot(for: providerID) != nil {
             Text("Connected")

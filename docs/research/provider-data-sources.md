@@ -310,7 +310,7 @@ API key, stored in the **macOS Keychain**. Needs the signed-bundle entitlement w
 
 1. **Step 4 = Codex adapter.** ✅ shipped (PR #6/#8).
 2. **Step 5 = Claude adapter, Option A** (token chart, percentages `nil`). ✅ shipped (PR #11).
-3. **Step 5.5 = Gemini CLI adapter.** ✅ shipped (PR #13). Antigravity "not measurable" notice — `feat/gemini-antigravity-notice` (see the 2026-09-09 correction above).
+3. **Step 5.5 = Gemini CLI adapter.** ✅ shipped (PR #13). Antigravity `/usage` quota groups via the `agy` CLI — `feat/three-antigravity-usage` (see Correction 2, 2026-09-10). PR #39's notice is the fallback when the CLI can't be read.
 4. **Step 5.6 = Claude plan name** (`~/.claude.json` → `organizationType`). ✅ shipped (PR #17).
 5. **Step 5.8 (new) = Claude session/weekly/reset from `cachedUsageUtilization`** — local, no auth. Full parity with the Codex card. → `docs/reviews/step-5.8-claude-local-usage-handoff.md`.
 6. **"Network adapters" milestone (after step 6 signing)** = **DeepSeek balance only** (Claude Option B dropped — Correction 2). Needs Keychain + a settings UI + the `balance` model field. Optionally a Six ToS check for the DeepSeek API key handling.
