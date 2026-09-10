@@ -181,11 +181,34 @@ Still valid: **plan name IS local** (`~/.claude.json` → `oauthAccount.organiza
 
 ## Gemini CLI — `~/.gemini/`
 
-### Correction (2026-09-09) — Google Antigravity records no usage
+### Correction (2026-09-09) — Antigravity's local *files* record no usage
 
-The maintainer moved from the legacy Gemini CLI to **Google Antigravity** (`~/.gemini/antigravity-cli/`). Verified against a live install: Antigravity's storage is a **conversation store only** — `brain/<id>/.system_generated/logs/transcript*.jsonl` (keys: `step_index / source / type / status / created_at / content`), `conversations/<id>.db` (protobuf blobs), `history.jsonl`, `conversation_summaries.db` — **none carry token counts** (`grep -iE 'tokenCount|usageMetadata|promptToken|totalToken'` → nothing). No quota/utilization cache either.
+The maintainer moved from the legacy Gemini CLI to **Google Antigravity** (`~/.gemini/antigravity-cli/`). Its on-disk storage is a **conversation store only** — `brain/<id>/.system_generated/logs/transcript*.jsonl`, `conversations/<id>.db` (protobuf blobs), `history.jsonl`, `conversation_summaries.db` — **none carry token counts**. No quota cache on disk either.
 
-So there is nothing to track. The Gemini adapter (shipped PR #13) keeps its legacy-CLI path, and when it detects Antigravity is the active tool — `~/.gemini/antigravity-cli/history.jsonl` or `conversations/` mtime within the last 7 days, with no legacy in-window token data — it returns a `UsageSnapshot` with `note: "Antigravity doesn't record token usage locally."` and an empty chart. The card shows that one line; Settings shows "Not measurable". (PR #38 handoff → `feat/gemini-antigravity-notice`.)
+PR #39 shipped a "not measurable" notice for this case.
+
+### Correction 2 (2026-09-10) — Antigravity `/usage` slash command *does* expose quota
+
+`agy` has a **local** `/usage` slash command that returns structured quota data without a model turn:
+
+```sh
+agy --print "/usage" --output-format json --print-timeout 30s
+```
+
+Returns `status: "SUCCESS"`, zero token counters, and `command.data.groups` — two independent **weekly** quota pools:
+
+| group | bucket id | `remaining_fraction` → `usedPercent` | `reset_time` |
+|---|---|---|---|
+| Gemini Models | `gemini-weekly` | `0.84` → 16% | ISO-8601 (plain or fractional) |
+| Claude and GPT models | `3p-weekly` | `0.25` → 75% | ISO-8601 |
+
+So Antigravity usage **is** trackable — via the CLI, not files. The Gemini adapter now:
+
+1. If `~/.gemini/antigravity-cli/` exists and `agy` resolves (`~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`), runs `/usage` off the main actor (`AntigravityUsageReader`, `Process` — no shell, no OAuth files, bounded ~45 s), decodes `command.data`, and returns a snapshot with `planName: "Antigravity"` + `quotaGroups` (new provider-neutral `UsageQuotaGroup` / `UsageQuotaWindow` on `UsageSnapshot`). Live quota **wins over legacy chat files.**
+2. If the CLI can't be read, falls back to the legacy Gemini CLI token chart.
+3. If neither yields data but Antigravity is active, a concise "*Antigravity usage couldn't be read right now.*" note.
+
+Privacy: the decoder models only `status`, `command.name/data`, group `name`, and bucket `id/window/remaining_fraction/reset_time` — never the free-form `response` / `description` strings or `stderr`. (`feat/three-antigravity-usage`, supersedes PR #39's notice-only approach.)
 
 ### Where usage lives (legacy Gemini CLI)
 

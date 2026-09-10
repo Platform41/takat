@@ -3,23 +3,27 @@ import Foundation
 public struct GeminiUsageProvider: UsageProvider {
     public let providerID: ProviderID = .gemini
 
-    /// Shown on the Gemini card when Google Antigravity is the active tool.
-    /// Antigravity records no token counts anywhere on disk (verified), so the
-    /// legacy-CLI token chart has nothing to show.
-    public static let antigravityNote = "Antigravity doesn't record token usage locally."
+    /// Shown on the Gemini card when Antigravity is the active tool but its
+    /// `/usage` quota couldn't be read this refresh (CLI missing, not
+    /// authenticated, timed out). It's a transient read failure, not a
+    /// statement that quota is unavailable in principle.
+    public static let antigravityNote = "Antigravity usage couldn't be read right now."
 
     private let chatsRoot: URL
     private let antigravityRoot: URL
     private let clock: @Sendable () -> Date
+    private let quotaSource: AntigravityQuotaSource
 
     public init(
         chatsRoot: URL = GeminiUsageProvider.defaultChatsRoot,
         antigravityRoot: URL = GeminiUsageProvider.defaultAntigravityRoot,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        quotaSource: AntigravityQuotaSource = AntigravityUsageReader()
     ) {
         self.chatsRoot = chatsRoot
         self.antigravityRoot = antigravityRoot
         self.clock = now
+        self.quotaSource = quotaSource
     }
 
     public static var defaultChatsRoot: URL {
@@ -40,7 +44,20 @@ public struct GeminiUsageProvider: UsageProvider {
         let cutoff = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now)) ?? now
 
         let files = chatFiles(in: chatsRoot)
-        let antigravityActive = antigravityActive(since: cutoff)
+        let antigravityRootExists = directoryExists(antigravityRoot)
+        let antigravityActive = antigravityRootExists && antigravityActive(since: cutoff)
+
+        // 1. Live Antigravity quota. It's the currently supported client, so it
+        //    wins over legacy chat files whenever it can be read — the two would
+        //    otherwise describe different tools.
+        if antigravityRootExists, let groups = await quotaSource.fetchQuotaGroups(), !groups.isEmpty {
+            return UsageSnapshot(
+                provider: .gemini,
+                planName: "Antigravity",
+                dailyTokenUsage: [],
+                quotaGroups: groups
+            )
+        }
 
         // No legacy Gemini CLI data at all.
         guard !files.isEmpty else {
@@ -166,6 +183,11 @@ public struct GeminiUsageProvider: UsageProvider {
             }
         }
         return files
+    }
+
+    private func directoryExists(_ url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
     }
 
     private func modificationDate(of url: URL) -> Date {

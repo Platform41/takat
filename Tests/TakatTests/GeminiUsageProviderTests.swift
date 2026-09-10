@@ -104,7 +104,26 @@ final class GeminiSessionParserTests: XCTestCase {
     }
 }
 
+struct StubQuotaSource: AntigravityQuotaSource {
+    let groups: [UsageQuotaGroup]?
+    func fetchQuotaGroups() async -> [UsageQuotaGroup]? { groups }
+}
+
 final class GeminiUsageProviderTests: XCTestCase {
+    /// The default for legacy/note-path tests: Antigravity `/usage` returns nothing.
+    private let noQuota = StubQuotaSource(groups: nil)
+
+    private func sampleQuotaGroups() -> [UsageQuotaGroup] {
+        [
+            UsageQuotaGroup(id: "gemini-weekly", name: "Gemini models", windows: [
+                UsageQuotaWindow(id: "gemini-weekly", name: "Weekly", usedPercent: 16, resetDate: Date(timeIntervalSince1970: 4_100_000_000))
+            ]),
+            UsageQuotaGroup(id: "3p-weekly", name: "Claude and GPT models", windows: [
+                UsageQuotaWindow(id: "3p-weekly", name: "Weekly", usedPercent: 75, resetDate: Date(timeIntervalSince1970: 4_100_100_000))
+            ]),
+        ]
+    }
+
     private func makeChatsRoot() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("TakatGeminiTests-\(UUID().uuidString)", isDirectory: true)
@@ -152,7 +171,7 @@ final class GeminiUsageProviderTests: XCTestCase {
         writeChatFile("dir-a/chats/session-1.json", content: geminiFile(messages: [geminiMessage(timestamp: iso.string(from: Date()), input: 100, output: 50)]), in: root)
         writeChatFile("dir-b/chats/session-2.json", content: geminiFile(messages: [geminiMessage(timestamp: iso.string(from: Date()), input: 30)]), in: root)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot()).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot(), quotaSource: noQuota).fetchUsage()
 
         let total = snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }
         XCTAssertEqual(total, 180)
@@ -171,14 +190,14 @@ final class GeminiUsageProviderTests: XCTestCase {
         let oldURL = root.appendingPathComponent("dir/chats/old.json")
         try? FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-30 * 24 * 3600)], ofItemAtPath: oldURL.path)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot()).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot(), quotaSource: noQuota).fetchUsage()
 
         XCTAssertEqual(snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }, 100)
     }
 
     func testMissingDirectoryThrowsNotConfigured() async {
         let root = makeChatsRoot().appendingPathComponent("does-not-exist", isDirectory: true)
-        let provider = GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot())
+        let provider = GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot(), quotaSource: noQuota)
 
         do {
             _ = try await provider.fetchUsage()
@@ -195,7 +214,7 @@ final class GeminiUsageProviderTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         try? FileManager.default.createDirectory(at: root.appendingPathComponent("dir"), withIntermediateDirectories: true)
 
-        let provider = GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot())
+        let provider = GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot(), quotaSource: noQuota)
 
         do {
             _ = try await provider.fetchUsage()
@@ -215,7 +234,7 @@ final class GeminiUsageProviderTests: XCTestCase {
         let url = root.appendingPathComponent("dir/chats/stale.json")
         try? FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-30 * 24 * 3600)], ofItemAtPath: url.path)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot()).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot(), quotaSource: noQuota).fetchUsage()
 
         XCTAssertEqual(snapshot.planName, "Gemini")
         XCTAssertEqual(snapshot.dailyTokenUsage.count, 7)
@@ -230,7 +249,7 @@ final class GeminiUsageProviderTests: XCTestCase {
 
         writeChatFile("dir/chats/bad.json", content: "not json", in: root)
 
-        let provider = GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot())
+        let provider = GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot(), quotaSource: noQuota)
 
         do {
             _ = try await provider.fetchUsage()
@@ -247,7 +266,7 @@ final class GeminiUsageProviderTests: XCTestCase {
         let agy = makeActiveAntigravityRoot()
         defer { try? FileManager.default.removeItem(at: agy) }
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: chats, antigravityRoot: agy).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: chats, antigravityRoot: agy, quotaSource: noQuota).fetchUsage()
 
         XCTAssertEqual(snapshot.note, GeminiUsageProvider.antigravityNote)
         XCTAssertEqual(snapshot.planName, "Gemini")
@@ -265,7 +284,7 @@ final class GeminiUsageProviderTests: XCTestCase {
         let url = root.appendingPathComponent("dir/chats/stale.json")
         try? FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-30 * 24 * 3600)], ofItemAtPath: url.path)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: agy).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: agy, quotaSource: noQuota).fetchUsage()
 
         XCTAssertEqual(snapshot.note, GeminiUsageProvider.antigravityNote)
         XCTAssertTrue(snapshot.dailyTokenUsage.isEmpty)
@@ -282,7 +301,7 @@ final class GeminiUsageProviderTests: XCTestCase {
         let old = iso.string(from: Date().addingTimeInterval(-30 * 24 * 3600))
         writeChatFile("dir/chats/touched.json", content: geminiFile(messages: [geminiMessage(timestamp: old, input: 5000, output: 999)]), in: root)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: agy).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: agy, quotaSource: noQuota).fetchUsage()
 
         XCTAssertEqual(snapshot.note, GeminiUsageProvider.antigravityNote)
         XCTAssertTrue(snapshot.dailyTokenUsage.isEmpty)
@@ -295,14 +314,15 @@ final class GeminiUsageProviderTests: XCTestCase {
         let old = iso.string(from: Date().addingTimeInterval(-30 * 24 * 3600))
         writeChatFile("dir/chats/touched.json", content: geminiFile(messages: [geminiMessage(timestamp: old, input: 5000)]), in: root)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot()).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: inactiveAntigravityRoot(), quotaSource: noQuota).fetchUsage()
 
         XCTAssertNil(snapshot.note)
         XCTAssertEqual(snapshot.dailyTokenUsage.count, 7)
         XCTAssertTrue(snapshot.dailyTokenUsage.allSatisfy { $0.tokenCount == 0 })
     }
 
-    func testLegacyDataTakesPrecedenceOverAntigravity() async throws {
+    func testLegacyUsedWhenLiveQuotaUnavailable() async throws {
+        // Antigravity active but /usage returns nothing → recent legacy data is the fallback.
         let root = makeChatsRoot()
         defer { try? FileManager.default.removeItem(at: root) }
         let agy = makeActiveAntigravityRoot()
@@ -310,9 +330,11 @@ final class GeminiUsageProviderTests: XCTestCase {
 
         writeChatFile("dir/chats/recent.json", content: geminiFile(messages: [geminiMessage(timestamp: iso.string(from: Date()), input: 100, output: 20)]), in: root)
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: agy).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: root, antigravityRoot: agy, quotaSource: noQuota).fetchUsage()
 
         XCTAssertNil(snapshot.note)
+        XCTAssertNil(snapshot.quotaGroups)
+        XCTAssertEqual(snapshot.planName, "Gemini")
         XCTAssertEqual(snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }, 120)
     }
 
@@ -324,8 +346,86 @@ final class GeminiUsageProviderTests: XCTestCase {
         try? FileManager.default.createDirectory(at: agy.appendingPathComponent("conversations"), withIntermediateDirectories: true)
         try? "x".data(using: .utf8)!.write(to: agy.appendingPathComponent("conversations/a.db"))
 
-        let snapshot = try await GeminiUsageProvider(chatsRoot: chats, antigravityRoot: agy).fetchUsage()
+        let snapshot = try await GeminiUsageProvider(chatsRoot: chats, antigravityRoot: agy, quotaSource: noQuota).fetchUsage()
 
         XCTAssertEqual(snapshot.note, GeminiUsageProvider.antigravityNote)
+    }
+
+    // MARK: Live Antigravity quota
+
+    func testLiveQuotaReturnsAntigravitySnapshot() async throws {
+        let chats = makeChatsRoot().appendingPathComponent("missing", isDirectory: true)
+        let agy = makeActiveAntigravityRoot()
+        defer { try? FileManager.default.removeItem(at: agy) }
+
+        let snapshot = try await GeminiUsageProvider(
+            chatsRoot: chats,
+            antigravityRoot: agy,
+            quotaSource: StubQuotaSource(groups: sampleQuotaGroups())
+        ).fetchUsage()
+
+        XCTAssertEqual(snapshot.planName, "Antigravity")
+        XCTAssertNil(snapshot.note)
+        XCTAssertTrue(snapshot.dailyTokenUsage.isEmpty)
+        XCTAssertEqual(snapshot.quotaGroups?.count, 2)
+        XCTAssertEqual(snapshot.quotaGroups?.first?.name, "Gemini models")
+        XCTAssertEqual(snapshot.quotaGroups?.first?.windows.first?.usedPercent, 16)
+        XCTAssertEqual(snapshot.quotaGroups?.last?.windows.first?.usedPercent, 75)
+        XCTAssertNotNil(snapshot.quotaGroups?.first?.windows.first?.resetDate)
+        XCTAssertNotEqual(
+            snapshot.quotaGroups?.first?.windows.first?.resetDate,
+            snapshot.quotaGroups?.last?.windows.first?.resetDate
+        )
+    }
+
+    func testLiveQuotaWinsOverRecentLegacyData() async throws {
+        let root = makeChatsRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let agy = makeActiveAntigravityRoot()
+        defer { try? FileManager.default.removeItem(at: agy) }
+
+        writeChatFile("dir/chats/recent.json", content: geminiFile(messages: [geminiMessage(timestamp: iso.string(from: Date()), input: 9999)]), in: root)
+
+        let snapshot = try await GeminiUsageProvider(
+            chatsRoot: root,
+            antigravityRoot: agy,
+            quotaSource: StubQuotaSource(groups: sampleQuotaGroups())
+        ).fetchUsage()
+
+        XCTAssertEqual(snapshot.planName, "Antigravity")
+        XCTAssertEqual(snapshot.quotaGroups?.count, 2)
+        XCTAssertTrue(snapshot.dailyTokenUsage.isEmpty)
+    }
+
+    func testLiveQuotaFailureWithNoLegacyShowsUpdatedNote() async throws {
+        let chats = makeChatsRoot().appendingPathComponent("missing", isDirectory: true)
+        let agy = makeActiveAntigravityRoot()
+        defer { try? FileManager.default.removeItem(at: agy) }
+
+        let snapshot = try await GeminiUsageProvider(
+            chatsRoot: chats,
+            antigravityRoot: agy,
+            quotaSource: noQuota
+        ).fetchUsage()
+
+        XCTAssertEqual(snapshot.note, "Antigravity usage couldn't be read right now.")
+        XCTAssertNil(snapshot.quotaGroups)
+    }
+
+    func testLiveQuotaNotRequestedWhenAntigravityRootMissing() async throws {
+        // A stub that would return groups, but the root doesn't exist → not used.
+        let root = makeChatsRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        writeChatFile("dir/chats/recent.json", content: geminiFile(messages: [geminiMessage(timestamp: iso.string(from: Date()), input: 42)]), in: root)
+
+        let snapshot = try await GeminiUsageProvider(
+            chatsRoot: root,
+            antigravityRoot: inactiveAntigravityRoot(),
+            quotaSource: StubQuotaSource(groups: sampleQuotaGroups())
+        ).fetchUsage()
+
+        XCTAssertNil(snapshot.quotaGroups)
+        XCTAssertEqual(snapshot.planName, "Gemini")
+        XCTAssertEqual(snapshot.dailyTokenUsage.reduce(0) { $0 + $1.tokenCount }, 42)
     }
 }
