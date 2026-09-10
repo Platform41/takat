@@ -9,8 +9,12 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
     public let dailyTokenUsage: [DailyTokenUsage]
     public let balance: Balance?
     /// The provider is present but its usage isn't locally measurable — this
-    /// explains why (e.g. Google Antigravity records no token counts on disk).
+    /// explains why (e.g. an Antigravity quota read that couldn't complete).
     public let note: String?
+    /// Independent quota pools reported by a provider that has more than the
+    /// single session/weekly pair the flat fields model (e.g. Antigravity's
+    /// "Gemini models" and "Claude and GPT models" weekly groups).
+    public let quotaGroups: [UsageQuotaGroup]?
 
     public init(
         provider: ProviderID,
@@ -20,7 +24,8 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
         resetDate: Date? = nil,
         dailyTokenUsage: [DailyTokenUsage] = [],
         balance: Balance? = nil,
-        note: String? = nil
+        note: String? = nil,
+        quotaGroups: [UsageQuotaGroup]? = nil
     ) {
         self.provider = provider
         self.planName = planName
@@ -30,6 +35,34 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
         self.dailyTokenUsage = dailyTokenUsage
         self.balance = balance
         self.note = note
+        self.quotaGroups = quotaGroups
+    }
+}
+
+public struct UsageQuotaGroup: Equatable, Sendable, Codable, Identifiable {
+    public let id: String
+    public let name: String
+    public let windows: [UsageQuotaWindow]
+
+    public init(id: String, name: String, windows: [UsageQuotaWindow]) {
+        self.id = id
+        self.name = name
+        self.windows = windows
+    }
+}
+
+public struct UsageQuotaWindow: Equatable, Sendable, Codable, Identifiable {
+    public let id: String
+    public let name: String
+    /// 0–100, already converted from "remaining" to "used".
+    public let usedPercent: Double
+    public let resetDate: Date?
+
+    public init(id: String, name: String, usedPercent: Double, resetDate: Date?) {
+        self.id = id
+        self.name = name
+        self.usedPercent = usedPercent
+        self.resetDate = resetDate
     }
 }
 

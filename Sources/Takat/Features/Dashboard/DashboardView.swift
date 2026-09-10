@@ -213,7 +213,11 @@ private struct ProviderCardView: View {
 
             freshnessRow
 
-            if let note = snapshot.note {
+            if let groups = snapshot.quotaGroups, !groups.isEmpty {
+                ForEach(groups) { group in
+                    QuotaGroupView(group: group, accent: snapshot.provider.accentColor)
+                }
+            } else if let note = snapshot.note {
                 Text(note)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -265,6 +269,31 @@ private struct ProviderCardView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                         .help("Provider unavailable — showing last known data")
+                }
+            }
+        }
+    }
+}
+
+private struct QuotaGroupView: View {
+    let group: UsageQuotaGroup
+    let accent: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(group.name)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(group.windows) { window in
+                UsageBar(title: window.name, percent: window.usedPercent)
+                    .tint(accent)
+                    .accessibilityLabel("\(group.name), \(window.name)")
+                    .accessibilityValue("\(Int(window.usedPercent.rounded())) percent used")
+                if let reset = window.resetDate {
+                    Text("Resets \(reset, format: .dateTime.month(.abbreviated).day())")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("\(group.name) \(window.name) resets \(reset, format: .dateTime.month(.wide).day())")
                 }
             }
         }
