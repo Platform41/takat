@@ -142,14 +142,18 @@ final class AntigravityUsageReaderDecodeTests: XCTestCase {
 }
 
 final class AntigravityUsageReaderProcessTests: XCTestCase {
-    /// Writes a tiny executable that prints `output` and exits `exitCode`.
-    private func fakeExecutable(printing output: String, exitCode: Int = 0) throws -> URL {
+    private func writeExecutable(_ body: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("agy-fake-\(UUID().uuidString)")
-        let script = "#!/bin/sh\ncat <<'AGYEOF'\n\(output)\nAGYEOF\nexit \(exitCode)\n"
-        try script.data(using: .utf8)!.write(to: url)
+        try ("#!/bin/sh\n" + body).data(using: .utf8)!.write(to: url)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url
+    }
+
+    /// Writes a tiny executable that prints `output` and exits `exitCode`,
+    /// ignoring its arguments.
+    private func fakeExecutable(printing output: String, exitCode: Int = 0) throws -> URL {
+        try writeExecutable("cat <<'AGYEOF'\n\(output)\nAGYEOF\nexit \(exitCode)\n")
     }
 
     private func validPayload() -> String {
@@ -160,16 +164,60 @@ final class AntigravityUsageReaderProcessTests: XCTestCase {
         """#
     }
 
-    func testRunsExecutableDirectlyAndDecodes() async throws {
-        let exe = try fakeExecutable(printing: validPayload())
+    func testRunsExecutableWithExactArgumentsAndDecodes() async throws {
+        // Emits valid JSON only when invoked with the precise five arguments —
+        // guards against a regression in `AntigravityUsageReader.arguments`.
+        let expected = "--print /usage --output-format json --print-timeout 30s"
+        let exe = try writeExecutable(#"""
+        if [ "$*" = "\#(expected)" ]; then
+        cat <<'AGYEOF'
+        \#(validPayload())
+        AGYEOF
+        else
+          echo "unexpected args: $*" 1>&2
+          exit 64
+        fi
+        """#)
         defer { try? FileManager.default.removeItem(at: exe) }
 
-        let reader = AntigravityUsageReader(executableOverride: exe)
-        let result = await reader.fetchQuotaGroups()
-        let groups = try XCTUnwrap(result)
+        let result = await AntigravityUsageReader(executableOverride: exe).fetchQuotaGroups()
+        let groups = try XCTUnwrap(result, "reader must invoke agy with exactly \(expected)")
 
         XCTAssertEqual(groups.count, 1)
         XCTAssertEqual(groups.first?.windows.first?.usedPercent ?? -1, 40, accuracy: 0.0001)
+    }
+
+    func testLargeStderrDoesNotBlockAValidResult() async throws {
+        // 2 MiB to stderr (past any pipe buffer), then valid JSON to stdout.
+        let exe = try writeExecutable(#"""
+        yes x | head -c 2097152 1>&2
+        cat <<'AGYEOF'
+        \#(validPayload())
+        AGYEOF
+        """#)
+        defer { try? FileManager.default.removeItem(at: exe) }
+
+        let start = Date()
+        let result = await AntigravityUsageReader(executableOverride: exe, processTimeout: 5).fetchQuotaGroups()
+
+        XCTAssertNotNil(result, "stderr back-pressure must not discard a valid stdout payload")
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3, "should not wait for the timeout")
+    }
+
+    func testCancellationTerminatesChildPromptly() async throws {
+        let exe = try writeExecutable("sleep 30\n")
+        defer { try? FileManager.default.removeItem(at: exe) }
+
+        let reader = AntigravityUsageReader(executableOverride: exe, processTimeout: 30)
+        let task = Task { await reader.fetchQuotaGroups() }
+        try await Task.sleep(for: .milliseconds(200))
+
+        let start = Date()
+        task.cancel()
+        let result = await task.value
+
+        XCTAssertNil(result)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 5, "cancellation must terminate the child, not wait for the timeout")
     }
 
     func testNonZeroExitYieldsNil() async throws {

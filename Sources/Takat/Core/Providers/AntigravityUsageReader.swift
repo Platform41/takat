@@ -10,8 +10,9 @@ public protocol AntigravityQuotaSource: Sendable {
 }
 
 /// Runs the installed `agy` executable's local `/usage` slash command and decodes
-/// its structured payload. No shell, no network, no OAuth files — the official
-/// executable owns authentication.
+/// its structured payload. No shell. Takat never reads OAuth credentials and
+/// never calls Google's Code Assist backend itself — but `agy` may refresh its
+/// quota over the network using its own existing authentication.
 public struct AntigravityUsageReader: AntigravityQuotaSource {
     /// Overrides executable resolution in tests.
     private let executableOverride: URL?
@@ -62,11 +63,25 @@ public struct AntigravityUsageReader: AntigravityQuotaSource {
 
     private func run(_ executable: URL) async -> Data? {
         let timeout = processTimeout
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: Self.runBlocking(executable, timeout: timeout))
+        let cancelled = CancelFlag()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    continuation.resume(
+                        returning: Self.runBlocking(executable, timeout: timeout, isCancelled: { cancelled.isSet })
+                    )
+                }
             }
+        } onCancel: {
+            cancelled.set()
         }
+    }
+
+    private final class CancelFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var flag = false
+        var isSet: Bool { lock.withLock { flag } }
+        func set() { lock.withLock { flag = true } }
     }
 
     private final class OutputBox: @unchecked Sendable {
@@ -76,7 +91,25 @@ public struct AntigravityUsageReader: AntigravityQuotaSource {
         var data: Data { lock.withLock { value } }
     }
 
-    private static func runBlocking(_ executable: URL, timeout: TimeInterval) -> Data? {
+    /// Reads a handle to EOF. Stores at most `cap` bytes (when `box` is given);
+    /// keeps reading past the cap so the pipe never back-pressures the child.
+    private static func drain(_ handle: FileHandle, into box: OutputBox?, cap: Int) {
+        var stored = 0
+        while let chunk = try? handle.read(upToCount: 64 << 10), !chunk.isEmpty {
+            guard let box else { continue }
+            let room = cap - stored
+            guard room > 0 else { continue }
+            let slice = chunk.prefix(room)
+            box.append(Data(slice))
+            stored += slice.count
+        }
+    }
+
+    private static func runBlocking(
+        _ executable: URL,
+        timeout: TimeInterval,
+        isCancelled: @escaping () -> Bool
+    ) -> Data? {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
@@ -92,36 +125,38 @@ public struct AntigravityUsageReader: AntigravityQuotaSource {
             return nil
         }
 
-        // Read stdout on its own thread so a silent child (no output, no exit)
-        // can't wedge us — the outer timeout stays in control.
-        let box = OutputBox()
-        let reader = DispatchQueue(label: "antigravity.usage.read")
-        reader.async {
-            let handle = stdout.fileHandleForReading
-            var collected = Data()
-            while let chunk = try? handle.read(upToCount: 64 << 10), !chunk.isEmpty {
-                collected.append(chunk)
-                if collected.count >= maxOutputBytes { break }
-            }
-            box.append(collected)
-        }
+        // Drain BOTH pipes concurrently from launch. A child that fills the
+        // stderr buffer must never block before it can exit.
+        let outBox = OutputBox()
+        let readers = DispatchGroup()
+        let queue = DispatchQueue(label: "antigravity.usage.read", attributes: .concurrent)
+        queue.async(group: readers) { drain(stdout.fileHandleForReading, into: outBox, cap: maxOutputBytes) }
+        queue.async(group: readers) { drain(stderr.fileHandleForReading, into: nil, cap: 0) }
 
         let finished = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in finished.signal() }
 
-        if finished.wait(timeout: .now() + timeout) == .timedOut {
-            process.terminate()
-            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
-            return nil
+        let deadline = Date().addingTimeInterval(timeout)
+        var abandoned = false
+        while true {
+            if finished.wait(timeout: .now() + .milliseconds(50)) == .success { break }
+            if Date() >= deadline || isCancelled() {
+                abandoned = true
+                process.terminate()
+                if finished.wait(timeout: .now() + .milliseconds(300)) == .timedOut, process.isRunning {
+                    kill(process.processIdentifier, SIGKILL)
+                }
+                _ = finished.wait(timeout: .now() + .seconds(2))
+                break
+            }
         }
 
-        // Process exited: its pipe write-ends are closed, so the reader loop
-        // ends on its own. Wait for it, then drain stderr and discard.
-        reader.sync {}
-        _ = try? stderr.fileHandleForReading.readToEnd()
+        process.waitUntilExit()          // ensure the child is reaped
+        readers.wait()                    // both pipes drained / closed
 
+        if abandoned { return nil }
         guard process.terminationStatus == 0 else { return nil }
-        return box.data
+        return outBox.data
     }
 
     // MARK: Decoding
