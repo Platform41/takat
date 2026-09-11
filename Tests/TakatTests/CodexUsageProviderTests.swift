@@ -20,6 +20,37 @@ final class CodexSessionParserTests: XCTestCase {
         #"{"timestamp":"\#(timestamp)","type":"session_meta","payload":{"session_id":"fake","cwd":"/fake","cli_version":"0.153.4","timestamp":"\#(timestamp)","base_instructions":{"text":"FAKE"}}}"#
     }
 
+    /// A per-model rate-limit block, e.g. a preview model's own weekly-only
+    /// quota — distinct from the account-wide "codex" family.
+    private func perModelRateLimitsLine(timestamp: String, limitID: String = "codex_bengalfox") -> String {
+        #"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1}},"rate_limits":{"limit_id":"\#(limitID)","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":10080,"resets_at":\#(Date().timeIntervalSince1970 + 432_000)},"secondary":null,"plan_type":"plus"}}}"#
+    }
+
+    func testIgnoresPerModelFamilyEvenAsLastLine() {
+        // The account-wide block appears first, then a per-model block —
+        // the last rate_limits in the file — must not replace it.
+        let lines = [
+            tokenCountLine(timestamp: "2026-09-06T06:50:06.843Z", input: 100, sessionPercent: 3, weeklyPercent: 16, planType: "plus"),
+            perModelRateLimitsLine(timestamp: "2026-09-06T06:51:00.000Z")
+        ]
+
+        let data = CodexSessionParser.parse(lines: lines)
+
+        XCTAssertEqual(data.rateLimits?.limit_id, "codex")
+        XCTAssertEqual(data.rateLimits?.sessionWindow?.used_percent, 3)
+        XCTAssertEqual(data.rateLimits?.weeklyWindow?.used_percent, 16)
+    }
+
+    func testWindowsResolveByDurationRegardlessOfPosition() throws {
+        // A hypothetical block with the windows swapped — sessionWindow /
+        // weeklyWindow must still pick the right one by window_minutes.
+        let json = #"{"limit_id":"codex","primary":{"used_percent":40,"window_minutes":10080,"resets_at":1},"secondary":{"used_percent":7,"window_minutes":300,"resets_at":2},"plan_type":"plus"}"#
+        let decoded = try JSONDecoder().decode(CodexRateLimits.self, from: Data(json.utf8))
+
+        XCTAssertEqual(decoded.sessionWindow?.used_percent, 7)
+        XCTAssertEqual(decoded.weeklyWindow?.used_percent, 40)
+    }
+
     func testExtractsLastRateLimits() {
         let lines = [
             tokenCountLine(timestamp: "2026-09-06T06:50:06.843Z", input: 100, sessionPercent: 10, weeklyPercent: 20, planType: "plus"),
@@ -137,6 +168,59 @@ final class CodexUsageProviderTests: XCTestCase {
 
     private func sessionMetaLine(timestamp: String) -> String {
         #"{"timestamp":"\#(timestamp)","type":"session_meta","payload":{"session_id":"fake","cwd":"/fake","cli_version":"0.153.4","timestamp":"\#(timestamp)","base_instructions":{"text":"FAKE"}}}"#
+    }
+
+    private func perModelRateLimitsLine(timestamp: String) -> String {
+        #"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1}},"rate_limits":{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":10080,"resets_at":\#(Date().timeIntervalSince1970 + 432_000)},"secondary":null,"plan_type":"plus"}}}"#
+    }
+
+    func testPerModelOnlyFileFallsBackToAccountFamilyInOlderFile() async throws {
+        let dir = makeSessionDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        // Newest file: entirely the per-model family (real-world shape for a
+        // session that only used a preview model) — no "codex" block at all.
+        writeSessionFile(
+            "rollout-b.jsonl",
+            lines: [sessionMetaLine(timestamp: "2026-09-09T21:00:00.000Z"), perModelRateLimitsLine(timestamp: "2026-09-09T21:13:00.000Z")],
+            in: dir
+        )
+        // Older file: the real account-wide limits.
+        writeSessionFile(
+            "rollout-a.jsonl",
+            lines: [
+                sessionMetaLine(timestamp: "2026-09-08T08:00:00.000Z"),
+                tokenCountLine(timestamp: "2026-09-08T08:13:00.000Z", input: 100, sessionPercent: 90, weeklyPercent: 14, planType: "plus")
+            ],
+            in: dir
+        )
+
+        let snapshot = try await CodexUsageProvider(sessionsDirectory: dir).fetchUsage()
+
+        XCTAssertEqual(snapshot.sessionPercent, 90)
+        XCTAssertEqual(snapshot.weeklyPercent, 14)
+    }
+
+    func testPerModelBlockMixedInNewestFileDoesNotOverrideAccountLimits() async throws {
+        let dir = makeSessionDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        // The account block comes first, a per-model block is the last line —
+        // this is the exact shape observed in a live ~/.codex session.
+        writeSessionFile(
+            "rollout-a.jsonl",
+            lines: [
+                sessionMetaLine(timestamp: "2026-09-09T21:00:00.000Z"),
+                tokenCountLine(timestamp: "2026-09-09T21:05:00.000Z", input: 100, sessionPercent: 3, weeklyPercent: 16, planType: "plus"),
+                perModelRateLimitsLine(timestamp: "2026-09-09T21:13:00.000Z")
+            ],
+            in: dir
+        )
+
+        let snapshot = try await CodexUsageProvider(sessionsDirectory: dir).fetchUsage()
+
+        XCTAssertEqual(snapshot.sessionPercent, 3)
+        XCTAssertEqual(snapshot.weeklyPercent, 16)
     }
 
     func testPicksNewestFileAcrossNestedDirs() async throws {
