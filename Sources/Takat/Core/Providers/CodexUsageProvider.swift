@@ -56,9 +56,9 @@ public struct CodexUsageProvider: UsageProvider {
         return UsageSnapshot(
             provider: .codex,
             planName: CodexSessionParser.planName(from: rateLimits.plan_type),
-            sessionPercent: livePercent(rateLimits.primary, at: now),
-            weeklyPercent: livePercent(rateLimits.secondary, at: now),
-            resetDate: liveReset(rateLimits.secondary, at: now),
+            sessionPercent: livePercent(rateLimits.sessionWindow, at: now),
+            weeklyPercent: livePercent(rateLimits.weeklyWindow, at: now),
+            resetDate: liveReset(rateLimits.weeklyWindow, at: now),
             dailyTokenUsage: daily
         )
     }
@@ -83,7 +83,11 @@ public struct CodexUsageProvider: UsageProvider {
     }
 
     private func latestRateLimits(in files: [URL]) -> CodexRateLimits? {
-        for file in files.prefix(3) {
+        // A handful of the newest files can be entirely a per-model limit
+        // family (e.g. a preview model with no "codex"-family block at all),
+        // so look a little further than the original brand-new-session
+        // fallback needed.
+        for file in files.prefix(10) {
             if let rateLimits = CodexSessionParser.parseRateLimitsOnly(lines: lines(of: file)) {
                 return rateLimits
             }

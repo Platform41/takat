@@ -29,7 +29,7 @@ enum CodexSessionParser {
             }
             guard event.payload.type == "token_count" else { continue }
 
-            if let rateLimits = event.payload.rate_limits {
+            if let rateLimits = event.payload.rate_limits, isAccountFamily(rateLimits) {
                 data.rateLimits = rateLimits
             }
 
@@ -62,12 +62,24 @@ enum CodexSessionParser {
             }
             guard event.payload.type == "token_count" else { continue }
 
-            if let rl = event.payload.rate_limits {
+            if let rl = event.payload.rate_limits, isAccountFamily(rl) {
                 rateLimits = rl
             }
         }
 
         return rateLimits
+    }
+
+    /// Codex now interleaves the account-wide "codex" rate-limit family
+    /// (5h + weekly, the plan's actual limits) with narrower per-model
+    /// families such as "codex_bengalfox" (a preview model's own weekly-only
+    /// pool). Only the account family belongs on the Takat card — a
+    /// per-model block would silently replace the real session/weekly
+    /// numbers with a different, unrelated quota. Older sessions predating
+    /// this split have no `limit_id` at all; treat that as the account
+    /// family too.
+    static func isAccountFamily(_ rateLimits: CodexRateLimits) -> Bool {
+        rateLimits.limit_id == nil || rateLimits.limit_id == "codex"
     }
 
     static func planName(from planType: String?) -> String {
@@ -106,12 +118,26 @@ struct CodexTokenUsage: Decodable {
 }
 
 struct CodexRateLimits: Decodable {
+    let limit_id: String?
     let primary: CodexWindow?
     let secondary: CodexWindow?
     let plan_type: String?
+
+    /// The 5-hour session window, identified by its duration rather than its
+    /// position — Codex has been observed putting the weekly window in
+    /// `primary` for some limit families, so position alone isn't reliable.
+    var sessionWindow: CodexWindow? {
+        [primary, secondary].compactMap { $0 }.first { $0.window_minutes == 300 }
+    }
+
+    /// The 7-day weekly window, identified by duration.
+    var weeklyWindow: CodexWindow? {
+        [primary, secondary].compactMap { $0 }.first { $0.window_minutes == 10_080 }
+    }
 }
 
 struct CodexWindow: Decodable {
     let used_percent: Double?
     let resets_at: Double?
+    let window_minutes: Int?
 }
